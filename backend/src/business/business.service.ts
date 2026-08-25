@@ -373,7 +373,7 @@ export class BusinessService {
     if (convo.completed) {
       return {
         conversationId: convo.id,
-        reply: 'Your onboarding is already complete! Your business profile has been set up. Head to the Dashboard to start using DIPARI AI.',
+        reply: 'Your onboarding is already complete! Your business profile has been set up. Head to the Dashboard to start using Visionpilot AI.',
         completed: true,
         progress: 100,
         collectedData: convo.collectedData || {},
@@ -473,7 +473,7 @@ export class BusinessService {
           .join('\n');
 
         reply = await this.aiService.chat(
-          `You are DIPARI AI, a friendly AI marketing assistant conducting business onboarding. You just received the user's answer. Briefly acknowledge their answer (1 short sentence), then smoothly transition to the next question. Do NOT repeat the exact question word for word — rephrase it naturally. The next field to ask about is: "${translatedQuestion}". Be warm and conversational. Note that the conversation must be conducted in ${userLang}. If the language is Hinglish, write in Hindi using English/Latin script.`,
+          `You are Visionpilot AI, a friendly AI marketing assistant conducting business onboarding. You just received the user's answer. Briefly acknowledge their answer (1 short sentence), then smoothly transition to the next question. Do NOT repeat the exact question word for word — rephrase it naturally. The next field to ask about is: "${translatedQuestion}". Be warm and conversational. Note that the conversation must be conducted in ${userLang}. If the language is Hinglish, write in Hindi using English/Latin script.`,
           `Previous answers:\n${previousContext}\n\nUser just answered: "${userMessage}"\n\nAcknowledge and ask about: ${translatedQuestion}`,
           0.7,
           200,
@@ -558,18 +558,18 @@ export class BusinessService {
 
     try {
       greeting = await this.aiService.chat(
-        `You are DIPARI AI, a friendly AI marketing onboarding assistant. Greet the user warmly and ask them the first onboarding question in a natural, conversational way. The conversation must be conducted in ${userLang}. If the language is Hinglish, write in Hindi using English/Latin script.`,
+        `You are Visionpilot AI, a friendly AI marketing onboarding assistant. Greet the user warmly and ask them the first onboarding question in a natural, conversational way. The conversation must be conducted in ${userLang}. If the language is Hinglish, write in Hindi using English/Latin script.`,
         `Generate a brief greeting (2-3 sentences) and then ask: "${translatedQuestion}"`,
         0.7,
         200,
         'BusinessService.startOnboarding',
       );
     } catch {
-      greeting = `Welcome to DIPARI AI! 🚀 I'm your AI Marketing Manager. Let me learn about your business so I can create the perfect marketing strategy. ${translatedQuestion}`;
+      greeting = `Welcome to Visionpilot AI! 🚀 I'm your AI Marketing Manager. Let me learn about your business so I can create the perfect marketing strategy. ${translatedQuestion}`;
     }
 
     if (!greeting) {
-      greeting = `Welcome to DIPARI AI! 🚀 Let's get your business set up. ${translatedQuestion}`;
+      greeting = `Welcome to Visionpilot AI! 🚀 Let's get your business set up. ${translatedQuestion}`;
     }
 
     // Create initial conversation
@@ -766,8 +766,8 @@ export class BusinessService {
       let amount = Number(p.amountPaid ?? p.amount ?? 0);
       if (amount === 0 && p.status === 'PAID') {
         if (rawPlan.includes('STARTER')) amount = 1499;
-        else if (rawPlan.includes('PRO')) amount = 4900;
-        else if (rawPlan.includes('ENTERPRISE')) amount = 11800;
+        else if (rawPlan.includes('PRO') || rawPlan.includes('ADVANCE')) amount = 5000;
+        else if (rawPlan.includes('ENTERPRISE') || rawPlan.includes('PREMIUM')) amount = 10000;
         else if (rawPlan.includes('DEMO_TEST') || rawPlan.includes('DEMO_1INR')) amount = 1;
       }
       if (amount === 0 && p.status === 'PENDING' && (rawPlan.includes('DEMO_TEST') || rawPlan.includes('DEMO_1INR'))) {

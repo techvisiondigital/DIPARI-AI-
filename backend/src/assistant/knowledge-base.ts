@@ -1,8 +1,8 @@
 /**
- * DIPARI AI Knowledge Base & RAG Chunks.
+ * Visionpilot AI Knowledge Base & RAG Chunks.
  *
  * Comprehensive product documentation and indexed chunks used by RagService
- * to power the DIPARI AI Help Bot.
+ * to power the Visionpilot AI Help Bot (Meta authorised AI marketing agent).
  */
 
 export interface KnowledgeChunk {
@@ -23,8 +23,8 @@ export const CAMPAIGNAI_CHUNKS: KnowledgeChunk[] = [
     title: 'Account Registration & Signup',
     module: 'Account & Authentication',
     pageUrl: '/register',
-    keywords: ['register', 'signup', 'create account', 'new user', 'join', 'sign up', 'registration'],
-    content: 'To create a new DIPARI AI account, visit the Registration page. You can sign up using your email and password or perform single-click sign-up with Google OAuth. Upon registration, you will be prompted to set up your business profile or run the Onboarding Wizard.',
+    keywords: ['register', 'signup', 'create account', 'new user', 'join', 'sign up', 'registration', 'visionpilot'],
+    content: 'To create a new Visionpilot AI account, visit the Registration page. You can sign up using your email and password or perform single-click sign-up with Google OAuth. Upon registration, you will be prompted to set up your business profile or run the Onboarding Wizard.',
     steps: [
       'Navigate to the Register page (/register).',
       'Enter your Full Name, Email Address, and Password (or click "Sign in with Google").',
@@ -39,12 +39,12 @@ export const CAMPAIGNAI_CHUNKS: KnowledgeChunk[] = [
     module: 'Account & Authentication',
     pageUrl: '/login',
     keywords: ['login', 'sign in', 'log in', 'access account', 'credentials', 'password'],
-    content: 'Existing users can log into DIPARI AI by entering their registered email and password on the Login page, or by choosing Google Sign In.',
+    content: 'Existing users can log into Visionpilot AI by entering their registered email and password on the Login page, or by choosing Google Sign In.',
     steps: [
       'Navigate to the Login page (/login).',
       'Enter your registered Email Address and Password.',
       'Click "Log In" or select "Continue with Google".',
-      'You will be redirected straight to your DIPARI AI Dashboard.'
+      'You will be redirected straight to your Visionpilot AI Dashboard.'
     ],
     nextSteps: 'Go to Dashboard to review active campaign metrics or connect your Meta account.'
   },
@@ -54,7 +54,7 @@ export const CAMPAIGNAI_CHUNKS: KnowledgeChunk[] = [
     module: 'Account & Authentication',
     pageUrl: '/forgot-password',
     keywords: ['forgot password', 'reset password', 'change password', 'recover password', 'password link', 'reset email'],
-    content: 'If you forgot your password, you can reset it via the Forgot Password option on the Login page. DIPARI AI sends a password reset link to your registered email address via Firebase Authentication.',
+    content: 'If you forgot your password, you can reset it via the Forgot Password option on the Login page. Visionpilot AI sends a password reset link to your registered email address via Firebase Authentication.',
     steps: [
       'On the Login page (/login), click "Forgot Password?".',
       'Enter your registered email address.',
@@ -70,12 +70,12 @@ export const CAMPAIGNAI_CHUNKS: KnowledgeChunk[] = [
     module: 'Account & Authentication',
     pageUrl: '/login',
     keywords: ['google sign in', 'google auth', 'google login', 'gmail login', 'oauth', 'google sso'],
-    content: 'Google Sign In allows fast, passwordless access to DIPARI AI using your Google account via Firebase OAuth integration.',
+    content: 'Google Sign In allows fast, passwordless access to Visionpilot AI using your Google account via Firebase OAuth integration.',
     steps: [
       'On the Login or Register page, click "Continue with Google".',
       'Select your Google Account from the popup window.',
       'Grant permissions to authenticate.',
-      'DIPARI AI will create or authenticate your user session automatically.'
+      'Visionpilot AI will create or authenticate your user session automatically.'
     ],
     nextSteps: 'Check your Business Profile under Settings to ensure account details are accurate.'
   },
@@ -85,7 +85,7 @@ export const CAMPAIGNAI_CHUNKS: KnowledgeChunk[] = [
     module: 'Account & Authentication',
     pageUrl: '/admin',
     keywords: ['admin login', 'admin portal', 'system admin', 'platform metrics', 'manage users', 'admin tickets'],
-    content: 'System administrators can access the DIPARI AI Admin Portal to view system-wide metrics, manage registered users, monitor business profiles, and handle escalated support tickets.',
+    content: 'System administrators can access the Visionpilot AI Admin Portal to view system-wide metrics, manage registered users, monitor business profiles, and handle escalated support tickets.',
     steps: [
       'Navigate to the Admin Portal (/admin).',
       'Authenticate with admin credentials.',
@@ -118,7 +118,7 @@ export const CAMPAIGNAI_CHUNKS: KnowledgeChunk[] = [
     module: 'Business Onboarding',
     pageUrl: '/onboarding',
     keywords: ['onboarding', 'wizard', '20 questions', 'business profile', 'strategy wizard', 'business details', 'setup strategy'],
-    content: 'During Business Onboarding, DIPARI AI uses an interactive 20-question chatbot wizard to gather comprehensive information about your business: business name, category, products/services, target audience demographics, location, monthly budget, brand tone, competitors, USP, and goals. This data powers AI ad generation, content calendar plans, and budget optimization.',
+    content: 'During Business Onboarding, Visionpilot AI uses an interactive 20-question chatbot wizard to gather comprehensive information about your business: business name, category, products/services, target audience demographics, location, monthly budget, brand tone, competitors, USP, and goals. This data powers AI ad generation, content calendar plans, and budget optimization.',
     steps: [
       'Navigate to Onboarding (/onboarding).',
       'Answer the interactive questions presented by the Onboarding AI assistant.',
@@ -135,7 +135,7 @@ export const CAMPAIGNAI_CHUNKS: KnowledgeChunk[] = [
     module: 'Meta Business Connection',
     pageUrl: '/settings?tab=meta',
     keywords: ['meta connection', 'connect meta', 'facebook integration', 'instagram integration', 'facebook page', 'ad account', 'oauth', 'link facebook', 'link instagram', 'meta business'],
-    content: 'Connecting Meta Business enables DIPARI AI to publish posts directly to Facebook Pages and Instagram Business accounts, manage Meta ad campaigns, capture leads from Lead Gen forms, and pull real-time campaign insights.',
+    content: 'Connecting Meta Business enables Visionpilot AI to publish posts directly to Facebook Pages and Instagram Business accounts, manage Meta ad campaigns, capture leads from Lead Gen forms, and pull real-time campaign insights.',
     steps: [
       'Go to Settings → Meta Integration tab.',
       'Click the "Connect Meta Business" button.',
@@ -170,7 +170,7 @@ export const CAMPAIGNAI_CHUNKS: KnowledgeChunk[] = [
     module: 'Campaign Creation',
     pageUrl: '/campaigns/new',
     keywords: ['create campaign', 'new campaign', 'campaign wizard', 'ai generator', 'ad creation', 'target audience', 'budget', 'ad copy', 'publish ad'],
-    content: 'DIPARI AI allows you to create high-converting Meta ad campaigns in minutes using the AI Campaign Generator or step-by-step Campaign Wizard. AI automatically generates persuasive ad copy, catchy headlines, call-to-action buttons, target audience recommendations, and daily budget allocations based on your onboarding profile.',
+    content: 'Visionpilot AI allows you to create high-converting Meta ad campaigns in minutes using the AI Campaign Generator or step-by-step Campaign Wizard. AI automatically generates persuasive ad copy, catchy headlines, call-to-action buttons, target audience recommendations, and daily budget allocations based on your onboarding profile.',
     steps: [
       'Navigate to Campaigns → Click "Create Campaign".',
       'Select your Campaign Objective (Lead Generation, Traffic, Conversions, or Brand Awareness).',
@@ -286,7 +286,7 @@ export const CAMPAIGNAI_CHUNKS: KnowledgeChunk[] = [
     module: 'Analytics',
     pageUrl: '/analytics',
     keywords: ['analytics', 'reports', 'demographic', 'gender split', 'age groups', 'facebook vs instagram', 'platform split', 'performance trends', 'roas report'],
-    content: 'DIPARI AI Analytics provides in-depth reporting on your marketing campaigns: Summary performance metrics, Demographic breakdown (Gender: Male/Female/Unknown, Age groups: 18-24, 25-34, 35-44, 45-54, 55-64, 65+), Platform breakdown (Facebook vs Instagram performance), and daily performance trends.',
+    content: 'Visionpilot AI Analytics provides in-depth reporting on your marketing campaigns: Summary performance metrics, Demographic breakdown (Gender: Male/Female/Unknown, Age groups: 18-24, 25-34, 35-44, 45-54, 55-64, 65+), Platform breakdown (Facebook vs Instagram performance), and daily performance trends.',
     steps: [
       'Click "Analytics" in the left sidebar menu.',
       'Select a time range (Last 7 Days, Last 30 Days, Custom Range).',
@@ -321,7 +321,7 @@ export const CAMPAIGNAI_CHUNKS: KnowledgeChunk[] = [
     module: 'Subscription Plans',
     pageUrl: '/settings?tab=billing',
     keywords: ['subscription', 'plans', 'pricing', 'free plan', 'premium plan', 'billing', 'upgrade', 'invoice', 'api limits'],
-    content: 'DIPARI AI offers flexible subscription plans tailored to business size: Free Tier (basic campaigns, limited content generation, manual export) and Premium Tiers (unlimited AI campaign generation, full Content Calendar, AI Lead Assistant, auto-publishing, advanced analytics, priority support).',
+    content: 'Visionpilot AI offers flexible subscription plans tailored to business size: Free Tier (basic campaigns, limited content generation, manual export) and Premium Tiers (unlimited AI campaign generation, full Content Calendar, AI Lead Assistant, auto-publishing, advanced analytics, priority support).',
     steps: [
       'Go to Settings → Billing & Subscription tab.',
       'View your current active plan and monthly usage quotas.',
@@ -338,7 +338,7 @@ export const CAMPAIGNAI_CHUNKS: KnowledgeChunk[] = [
     module: 'Support Tickets',
     pageUrl: '/support',
     keywords: ['support', 'tickets', 'create ticket', 'help ticket', 'customer service', 'support request', 'ticket status', 'help bot'],
-    content: 'If you encounter an issue or have a complex technical request, you can submit a Support Ticket directly through the platform. Track your ticket status (Open, In Progress, Resolved) and receive updates from the DIPARI AI support team.',
+    content: 'If you encounter an issue or have a complex technical request, you can submit a Support Ticket directly through the platform. Track your ticket status (Open, In Progress, Resolved) and receive updates from the Visionpilot AI support team.',
     steps: [
       'Navigate to Support (/support).',
       'Click "Create Ticket".',
@@ -346,7 +346,7 @@ export const CAMPAIGNAI_CHUNKS: KnowledgeChunk[] = [
       'Click "Submit Ticket".',
       'Track ticket status and view resolution notes under My Tickets.'
     ],
-    nextSteps: 'You can also ask the DIPARI AI Help Bot anytime from the floating bottom-left chat icon!'
+    nextSteps: 'You can also ask the Visionpilot AI Help Bot anytime from the floating bottom-left chat icon!'
   },
 
   // --- 12. Troubleshooting & FAQs ---
@@ -356,18 +356,18 @@ export const CAMPAIGNAI_CHUNKS: KnowledgeChunk[] = [
     module: 'FAQs',
     pageUrl: '/support#faq',
     keywords: ['faq', 'error', 'troubleshoot', 'help', 'issue', 'problem', 'not working', 'fix', 'cannot post', 'ad disapproved'],
-    content: 'Common DIPARI AI FAQs:\n- Q: Why did my post fail to publish?\nA: Check Settings → Meta Integration. Ensure your Facebook Page & Instagram account tokens are connected and permissions have not expired.\n- Q: How often does the Auto Scheduler run?\nA: It executes background checks every 5 minutes.\n- Q: Can I export my leads?\nA: Yes, go to Lead Management and click "Export CSV".\n- Q: Is Google Sign In supported?\nA: Yes, you can log in using Google OAuth on the Login page.',
+    content: 'Common Visionpilot AI FAQs:\n- Q: Why did my post fail to publish?\nA: Check Settings → Meta Integration. Ensure your Facebook Page & Instagram account tokens are connected and permissions have not expired.\n- Q: How often does the Auto Scheduler run?\nA: It executes background checks every 5 minutes.\n- Q: Can I export my leads?\nA: Yes, go to Lead Management and click "Export CSV".\n- Q: Is Google Sign In supported?\nA: Yes, you can log in using Google OAuth on the Login page.',
     steps: [
       'Check if your issue is covered under the FAQs in Settings or Support.',
       'For connection issues, disconnect and reconnect Meta under Settings → Meta Integration.',
-      'For general questions about features, ask the DIPARI AI Help Bot in the chat drawer.'
+      'For general questions about features, ask the Visionpilot AI Help Bot in the chat drawer.'
     ],
     nextSteps: 'If the issue persists, submit a Support Ticket under /support.'
   }
 ];
 
 export const CAMPAIGNAI_KNOWLEDGE_BASE = `
-# DIPARI AI — Official Platform Documentation & RAG Knowledge Base
+# Visionpilot AI — Official Platform Documentation (Meta Authorised AI Marketing Agent) & RAG Knowledge Base
 
 ## 1. Account & Authentication
 - **Registration (/register)**: Register using email/password or Google OAuth. Creates user profile and initializes onboarding.
@@ -417,16 +417,19 @@ export const CAMPAIGNAI_KNOWLEDGE_BASE = `
 - **Business Profile (/settings)**: Update business name, products, brand tone, location, and target audience.
 - **Preferences**: Light/Dark theme toggle and notification alert settings.
 
-## 10. Subscription Plans & Billing
-- **Plans (/settings?tab=billing)**: Free Tier vs Premium Tier subscriptions with usage quotas and feature access control.
+## 10. Subscription Plans & Pricing
+- **Basic (Free 7 days trial)**: Free. Includes 3 posts (2 standard, 1 carousel) / week, graphics regeneration 3 times, No Ad campaign, Experience next generation Marketing.
+- **Advance Plan**: ₹5,000. Includes 3 posts (2 standard, 1 carousel) / week, graphics regeneration 3 times, 15 days Ad campaign, 24X7 support, Visible growth in sales in 1 week.
+- **Premium Plan**: ₹10,000. Includes 5 posts (2 standard, 1 carousel) / week, graphics regeneration 3 times, 30 days Ad campaign, 24X7 support, Visible growth in sales in 1 week.
+- **Customized Plan**: Contact Us. Tailored customized plan created as per your budget.
 
 ## 11. Support Tickets & Support Assistant
 - **Support Tickets (/support)**: Create, track, and manage customer support requests (Open, In Progress, Resolved).
-- **DIPARI AI Help Bot**: Official floating support assistant available 24/7.
+- **Visionpilot AI Help Bot**: Official floating support assistant available 24/7 (Meta authorised AI marketing agent).
 `;
 
 export const ALLOWED_TOPICS = [
-  'campaignai', 'dashboard', 'campaigns', 'campaign', 'meta', 'facebook', 'instagram',
+  'visionpilot', 'visionpilotai', 'campaignai', 'dashboard', 'campaigns', 'campaign', 'meta', 'facebook', 'instagram',
   'analytics', 'content calendar', 'content planner', 'scheduler', 'scheduling',
   'lead management', 'leads', 'crm', 'settings', 'subscription', 'billing',
   'authentication', 'login', 'signup', 'register', 'password', 'support', 'help',

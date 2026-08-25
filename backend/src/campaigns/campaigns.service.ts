@@ -41,7 +41,7 @@ export class CampaignsService {
     const limits = getPlanLimits(planName);
     if (!limits.allowAdCampaigns) {
       throw new BadRequestException(
-        `Ad campaigns are disabled on your current ${limits.name} plan. Please upgrade to Advance (₹5,900) or Premium (₹11,800) plan to launch Ad Campaigns.`
+        `Ad campaigns are disabled on your current ${limits.name} plan. Please upgrade to Advance (₹5,000) or Premium (₹10,000) plan to launch Ad Campaigns.`
       );
     }
 

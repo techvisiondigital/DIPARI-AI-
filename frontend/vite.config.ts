@@ -8,7 +8,8 @@ export default defineConfig({
     port: 3000,
     host: true,
     allowedHosts: [
-      'remark-organization-discounted-carlos.trycloudflare.com'  //remove it before deploying
+      'visionpilotai.techvisiondigital.in',
+      'remark-organization-discounted-carlos.trycloudflare.com',
     ],
   },
 });

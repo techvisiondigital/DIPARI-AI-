@@ -1,5 +1,5 @@
-/**
- * Firestore Schema & Type Definitions for DIPARI AI Social Media Scheduler
+/**
+ * Firestore Schema & Type Definitions for Visionpilot AI Social Media Scheduler
  */
 
 export type UserRole = 'ADMIN' | 'MEMBER' | 'AGENCY';

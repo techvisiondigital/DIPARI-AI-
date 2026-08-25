@@ -7,7 +7,7 @@ import { IntegrationsService } from '../src/integrations/integrations.service';
 import { launchFullMetaCampaignHierarchy } from '../src/lib/meta/ads-manager';
 
 /**
- * DIPARI AI — Standalone E2E Pipeline Runner Script
+ * Visionpilot AI — Standalone E2E Pipeline Runner Script (Meta Authorised AI Marketing Agent)
  * Bypasses frontend OAuth UI to test full pipeline for target user: akanshlakhian23@gmail.com
  *
  * Pipeline Steps:
@@ -18,7 +18,7 @@ import { launchFullMetaCampaignHierarchy } from '../src/lib/meta/ads-manager';
  */
 async function runE2EPipeline() {
   console.log('\n================================================================================');
-  console.log(' 🚀 DIPARI AI BACKEND E2E PIPELINE RUNNER');
+  console.log(' 🚀 VISIONPILOT AI BACKEND E2E PIPELINE RUNNER (Meta Authorised AI Marketing Agent)');
   console.log(' Target User: akanshlakhian23@gmail.com');
   console.log(' Time:', new Date().toISOString());
   console.log('================================================================================\n');

@@ -54,7 +54,7 @@ export class RagService {
 
     // 2. Check explicit out-of-scope patterns
     const matchesOOS = this.outOfScopePatterns.some(pattern => pattern.test(trimmed));
-    if (matchesOOS && !this.hasDirectDipariAIMatch(trimmed)) {
+    if (matchesOOS && !this.hasDirectVisionpilotAIMatch(trimmed)) {
       this.logger.log(`Query matched explicit out-of-scope pattern: "${query}"`);
       return {
         isOutOfScope: true,
@@ -82,7 +82,7 @@ export class RagService {
     // Threshold cutoff (min score required to consider context relevant)
     const RELEVANCE_THRESHOLD = 0.5;
 
-    if (topScore < RELEVANCE_THRESHOLD && !this.hasDirectDipariAIMatch(trimmed)) {
+    if (topScore < RELEVANCE_THRESHOLD && !this.hasDirectVisionpilotAIMatch(trimmed)) {
       return {
         isOutOfScope: true,
         isGreeting: false,
@@ -109,19 +109,19 @@ export class RagService {
    * Polite refusal message for out-of-scope or unretrieved queries.
    */
   getOutOfScopeResponse(): string {
-    return "I'm sorry, but I'm the DIPARI AI Help Assistant and I can only assist with questions related to DIPARI AI and its features.\n\nIf you have any questions about using DIPARI AI, connecting Meta, creating campaigns, managing leads, analytics, content scheduling, or any other platform functionality, I'll be happy to help.";
+    return "I'm sorry, but I'm the Visionpilot AI Help Assistant (Meta authorised AI marketing agent) and I can only assist with questions related to Visionpilot AI and its features.\n\nIf you have any questions about using Visionpilot AI, connecting Meta, creating campaigns, managing leads, analytics, content scheduling, or any other platform functionality, I'll be happy to help.";
   }
 
   /**
-   * Greeting message welcoming user to DIPARI AI support.
+   * Greeting message welcoming user to Visionpilot AI support.
    */
   getGreetingResponse(): string {
-    return "Hello! 👋 I am the official DIPARI AI Help Assistant.\n\nI'm here to help you understand and navigate DIPARI AI. Ask me anything about:\n\n• 👤 Account & Authentication\n• 📱 Meta Connection (Facebook/Instagram)\n• 🚀 Campaign Creation & AI Generator\n• 📅 Content Calendar & Auto Scheduler\n• 👥 Lead CRM & AI Lead Assistant\n• 📊 Analytics & Reports\n• ⚙️ Settings & Subscription Plans\n\nHow can I help you today?";
+    return "Hello! 👋 I am the official Visionpilot AI Help Assistant (Meta authorised AI marketing agent).\n\nI'm here to help you understand and navigate Visionpilot AI. Ask me anything about:\n\n• 👤 Account & Authentication\n• 📱 Meta Connection (Facebook/Instagram)\n• 🚀 Campaign Creation & AI Generator\n• 📅 Content Calendar & Auto Scheduler\n• 👥 Lead CRM & AI Lead Assistant\n• 📊 Analytics & Reports\n• ⚙️ Settings & Subscription Plans\n\nHow can I help you today?";
   }
 
-  private hasDirectDipariAIMatch(trimmed: string): boolean {
+  private hasDirectVisionpilotAIMatch(trimmed: string): boolean {
     const directKeywords = [
-      'dipari', 'campaignai', 'campaign', 'meta', 'facebook', 'instagram',
+      'visionpilot', 'visionpilotai', 'dipari', 'campaignai', 'campaign', 'meta', 'facebook', 'instagram',
       'lead', 'analytic', 'analytics', 'anaytics', 'scheduler', 'schedule',
       'onboarding', 'roas', 'platform', 'feature', 'help', 'app', 'tool',
       'website', 'seo', 'post', 'ad', 'subscription', 'plan', 'billing', 'price', 'cost'

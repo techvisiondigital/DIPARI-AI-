@@ -14,7 +14,7 @@ export const PLAN_PRICING_MAP: Record<string, PlanPricing> = {
     name: 'FREE',
     amount: 0,
     currency: 'INR',
-    description: 'DIPARI AI Basic Free 7 Days Trial',
+    description: 'Visionpilot AI Basic Free 7 Days Trial',
     allowAdCampaigns: false, // "No Ad campaign" on Free plan
     postsPerWeek: 3,        // "3 post (2 standard, 1 carousel) / week"
     graphicsRegenLimit: 3,  // "graphics regeneration 3 times"
@@ -24,7 +24,7 @@ export const PLAN_PRICING_MAP: Record<string, PlanPricing> = {
     name: 'FREE',
     amount: 0,
     currency: 'INR',
-    description: 'DIPARI AI Basic Free 7 Days Trial',
+    description: 'Visionpilot AI Basic Free 7 Days Trial',
     allowAdCampaigns: false,
     postsPerWeek: 3,
     graphicsRegenLimit: 3,
@@ -34,7 +34,7 @@ export const PLAN_PRICING_MAP: Record<string, PlanPricing> = {
     name: 'DEMO_TEST',
     amount: 1.00,
     currency: 'INR',
-    description: 'DIPARI AI Demo Test Plan - ₹1 Checkout',
+    description: 'Visionpilot AI Demo Test Plan - ₹1 Checkout',
     allowAdCampaigns: true,
     postsPerWeek: 7,
     graphicsRegenLimit: 5,
@@ -44,7 +44,7 @@ export const PLAN_PRICING_MAP: Record<string, PlanPricing> = {
     name: 'DEMO_1INR',
     amount: 1.00,
     currency: 'INR',
-    description: 'DIPARI AI Demo Test Plan - ₹1 Checkout',
+    description: 'Visionpilot AI Demo Test Plan - ₹1 Checkout',
     allowAdCampaigns: true,
     postsPerWeek: 7,
     graphicsRegenLimit: 5,
@@ -54,7 +54,7 @@ export const PLAN_PRICING_MAP: Record<string, PlanPricing> = {
     name: 'STARTER',
     amount: 1499.00,
     currency: 'INR',
-    description: 'DIPARI AI Starter Plan',
+    description: 'Visionpilot AI Starter Plan',
     allowAdCampaigns: false,
     postsPerWeek: 3,
     graphicsRegenLimit: 3,
@@ -62,19 +62,19 @@ export const PLAN_PRICING_MAP: Record<string, PlanPricing> = {
   },
   ADVANCE: {
     name: 'ADVANCE',
-    amount: 5900.00,
+    amount: 5000.00,
     currency: 'INR',
-    description: 'DIPARI AI Advance Pro Campaign Plan',
+    description: 'Visionpilot AI Advance Plan',
     allowAdCampaigns: true,  // "15 days Ad campaign"
-    postsPerWeek: 3,         // "3 post / week"
+    postsPerWeek: 3,         // "3 post (2 standard, 1 carrousal) / week"
     graphicsRegenLimit: 3,   // "graphics regeneration 3 times"
     maxAdDays: 15,
   },
   PRO: {
     name: 'ADVANCE',
-    amount: 5900.00,
+    amount: 5000.00,
     currency: 'INR',
-    description: 'DIPARI AI Advance Pro Campaign Plan',
+    description: 'Visionpilot AI Advance Plan',
     allowAdCampaigns: true,
     postsPerWeek: 3,
     graphicsRegenLimit: 3,
@@ -82,19 +82,19 @@ export const PLAN_PRICING_MAP: Record<string, PlanPricing> = {
   },
   PREMIUM: {
     name: 'PREMIUM',
-    amount: 11800.00,
+    amount: 10000.00,
     currency: 'INR',
-    description: 'DIPARI AI Premium Enterprise Scale Plan',
+    description: 'Visionpilot AI Premium Plan',
     allowAdCampaigns: true,  // "30 days Ad campaign"
-    postsPerWeek: 5,         // "5 post / week"
+    postsPerWeek: 5,         // "5 post (2 standard, 1 carrousal) / week"
     graphicsRegenLimit: 3,   // "graphics regeneration 3 times"
     maxAdDays: 30,
   },
   ENTERPRISE: {
     name: 'PREMIUM',
-    amount: 11800.00,
+    amount: 10000.00,
     currency: 'INR',
-    description: 'DIPARI AI Premium Enterprise Scale Plan',
+    description: 'Visionpilot AI Premium Plan',
     allowAdCampaigns: true,
     postsPerWeek: 5,
     graphicsRegenLimit: 3,

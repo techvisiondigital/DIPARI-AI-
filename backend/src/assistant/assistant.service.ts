@@ -6,9 +6,9 @@ import { KnowledgeChunk } from './knowledge-base';
 import { PromptBuilderService } from '../prompt-builder/prompt-builder.service';
 
 /**
- * AssistantService — DIPARI AI Help Bot.
+ * AssistantService — Visionpilot AI Help Bot.
  *
- * RAG-based support assistant dedicated exclusively to DIPARI AI.
+ * RAG-based support assistant dedicated exclusively to Visionpilot AI (Meta authorised AI marketing agent).
  * Consumes business context via PromptBuilderService.
  */
 @Injectable()
@@ -117,22 +117,22 @@ export class AssistantService {
       .map(c => `### ${c.title} (Module: ${c.module}, Page: ${c.pageUrl})\n${c.content}\n${c.steps ? 'Steps:\n' + c.steps.map((s, i) => `${i + 1}. ${s}`).join('\n') : ''}\n${c.nextSteps ? 'Next Step: ' + c.nextSteps : ''}`)
       .join('\n\n');
 
-    const systemPrompt = `You are the official DIPARI AI Help Assistant — dedicated to supporting users with DIPARI AI.
+    const systemPrompt = `You are the official Visionpilot AI Help Assistant — dedicated to supporting users with Visionpilot AI (Meta authorised AI marketing agent).
 
 ${businessPromptContext ? businessPromptContext + '\n\n' : ''}CRITICAL RULES:
-1. You MUST generate responses ONLY using the retrieved DIPARI AI knowledge context below.
+1. You MUST generate responses ONLY using the retrieved Visionpilot AI knowledge context below.
 2. DO NOT use external knowledge or general knowledge (no programming, pop culture, sports, general AI explanations, etc.).
 3. If the user's question cannot be answered using the provided context, respond politely:
-"I'm sorry, but I'm the DIPARI AI Help Assistant and I can only assist with questions related to DIPARI AI and its features. If you have any questions about using DIPARI AI, connecting Meta, creating campaigns, managing leads, analytics, content scheduling, or any other platform functionality, I'll be happy to help."
+"I'm sorry, but I'm the Visionpilot AI Help Assistant (Meta authorised AI marketing agent) and I can only assist with questions related to Visionpilot AI and its features. If you have any questions about using Visionpilot AI, connecting Meta, creating campaigns, managing leads, analytics, content scheduling, or any other platform functionality, I'll be happy to help."
 4. PERSONALITY: Professional, friendly, helpful, patient, respectful, concise, and easy to understand.
-5. NEVER say "I can't". Instead say "I'm sorry, but I'm designed specifically to assist with DIPARI AI."
+5. NEVER say "I can't". Instead say "I'm sorry, but I'm designed specifically to assist with Visionpilot AI."
 6. RESPONSE STRUCTURE:
    - Provide clear, step-by-step guidance.
    - Mention the relevant page or module name (e.g. Settings → Meta Integration, Lead CRM, Dashboard, Content Calendar).
    - Suggest the logical next step.
 7. FORMATTING CONSTRAINT: Do NOT use markdown double stars (**) or markdown header hashes (###). Provide clean, refined, easy-to-read text with numbered steps or bullet points.
 
-RETRIEVED CAMPAIGNAI KNOWLEDGE CONTEXT:
+RETRIEVED VISIONPILOT AI KNOWLEDGE CONTEXT:
 ${formattedContext}`;
 
     const contextMessages = history.slice(-6).map((m: any) =>

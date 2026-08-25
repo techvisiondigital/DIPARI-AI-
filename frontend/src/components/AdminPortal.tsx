@@ -38,13 +38,13 @@ export function AdminPortal({ user, onLogout, addToast }: AdminPortalProps) {
 
   // Active Tab state (persisted across browser refreshes)
   const [activeTab, setActiveTab] = useState<'overview' | 'clients' | 'campaigns' | 'insights' | 'scheduler' | 'seo' | 'finance' | 'health' | 'prompts' | 'logs'>(() => {
-    const saved = localStorage.getItem('dipari_admin_active_tab');
+    const saved = localStorage.getItem('visionpilot_admin_active_tab') || localStorage.getItem('dipari_admin_active_tab');
     return saved ? (saved as any) : 'overview';
   });
 
   useEffect(() => {
     if (activeTab) {
-      localStorage.setItem('dipari_admin_active_tab', activeTab);
+      localStorage.setItem('visionpilot_admin_active_tab', activeTab);
     }
   }, [activeTab]);
 
@@ -2319,7 +2319,7 @@ export function AdminPortal({ user, onLogout, addToast }: AdminPortalProps) {
                 <div style={{ padding: 24, background: '#0f172a', border: '1px solid #1e293b', borderRadius: 12 }}>
                   <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 12, color: '#f8fafc' }}>Manual Snippet Injection Hub</h3>
                   <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: 14, lineHeight: 1.4 }}>
-                    Deploy the DIPARI AI indexing and leads tracking snippet into your clients WordPress or Shopify sites.
+                    Deploy the Visionpilot AI indexing and leads tracking snippet into your clients WordPress or Shopify sites.
                   </p>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

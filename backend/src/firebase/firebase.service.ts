@@ -360,13 +360,13 @@ export class FirebaseService implements OnModuleInit {
         const adminId = 'admin-user-id';
         await this.createUser({
           email: adminEmail,
-          name: 'DIPARI AI Admin',
+          name: 'Visionpilot AI Admin',
           passwordHash: 'password123',
           role: 'ADMIN',
         }, adminId);
 
         const business = await this.createBusiness({
-          name: 'DIPARI AI Enterprise',
+          name: 'Visionpilot AI Enterprise',
           ownerId: adminId,
         });
 

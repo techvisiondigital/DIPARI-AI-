@@ -71,7 +71,7 @@ export class OpenRouterService {
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
             'HTTP-Referer': 'https://campaignai.app',
-            'X-Title': 'DIPARI AI',
+            'X-Title': 'Visionpilot AI',
           },
         },
       );
@@ -101,7 +101,7 @@ export class OpenRouterService {
                 'Authorization': `Bearer ${this.apiKey}`,
                 'Content-Type': 'application/json',
                 'HTTP-Referer': 'https://campaignai.app',
-                'X-Title': 'DIPARI AI',
+                'X-Title': 'Visionpilot AI',
               },
             },
           );
@@ -180,7 +180,7 @@ export class OpenRouterService {
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
             'HTTP-Referer': 'https://campaignai.app',
-            'X-Title': 'DIPARI AI',
+            'X-Title': 'Visionpilot AI',
           },
           timeout: 15_000,
         },

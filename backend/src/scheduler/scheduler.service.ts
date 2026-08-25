@@ -741,7 +741,7 @@ HASHTAGS: #tag1 #tag2 #tag3 #tag4 #tag5 #tag6 #tag7 #tag8`;
         const catTag = `#${String(category).replace(/[^a-z0-9]/gi, '')}`;
         const bizTag = `#${String(businessName).replace(/[^a-z0-9]/gi, '')}`;
         const prodTag = `#${String(productsServices.split(',')[0] || 'Products').replace(/[^a-z0-9]/gi, '')}`;
-        hashtags = [catTag, bizTag, prodTag, '#DIPARIAI', '#SmallBusiness', '#SocialMedia', '#Style', '#Quality'];
+        hashtags = [catTag, bizTag, prodTag, '#VisionpilotAI', '#SmallBusiness', '#SocialMedia', '#Style', '#Quality'];
       }
 
       const imageUrl = await buildImageUrl(blueprint.imageTheme, posts.length);

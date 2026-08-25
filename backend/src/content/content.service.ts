@@ -944,7 +944,7 @@ export class ContentService {
 
     const context = await this.businessIntelligence.getBusinessContext(entry.businessId);
 
-    const prompt = `You are an expert social media marketing writer for CampaignAI.
+    const prompt = `You are an expert social media marketing writer for Visionpilot AI (Meta authorised AI marketing agent).
 Regenerate creative content for a single post:
 Business: ${context.businessName}
 Industry: ${context.businessCategory}

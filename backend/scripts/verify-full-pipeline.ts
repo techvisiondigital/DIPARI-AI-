@@ -11,7 +11,7 @@ import { IntegrationsService } from '../src/integrations/integrations.service';
 import { launchFullMetaCampaignHierarchy } from '../src/lib/meta/ads-manager';
 
 /**
- * DIPARI AI — Full End-to-End Pipeline Verification Script
+ * Visionpilot AI — Full End-to-End Pipeline Verification Script (Meta Authorised AI Marketing Agent)
  *
  * Verifies:
  * 1. 10-Question Onboarding & Workspace Context Store
@@ -21,7 +21,7 @@ import { launchFullMetaCampaignHierarchy } from '../src/lib/meta/ads-manager';
  */
 async function verifyFullPipeline() {
   console.log('\n================================================================================');
-  console.log(' 🛡️ DIPARI AI FULL END-TO-END PIPELINE VERIFICATION AUDIT');
+  console.log(' 🛡️ VISIONPILOT AI FULL END-TO-END PIPELINE VERIFICATION AUDIT');
   console.log(' Time:', new Date().toISOString());
   console.log('================================================================================\n');
 

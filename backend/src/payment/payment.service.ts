@@ -76,10 +76,10 @@ export class PaymentService {
     // Company name
     ctx.fillStyle = '#FFFFFF';
     ctx.font = 'bold 36px sans-serif';
-    ctx.fillText('CampaignAI', 40, 60);
-    ctx.font = '16px sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
-    ctx.fillText('Payment Invoice', 40, 90);
+    ctx.fillText('Visionpilot AI', 40, 60);
+    ctx.font = '14px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillText('Meta Authorised AI Marketing Agent • Tax Invoice', 40, 90);
 
     // Invoice badge
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
@@ -122,8 +122,8 @@ export class PaymentService {
     ctx.fillRect(0, height - 80, width, 80);
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.font = '13px sans-serif';
-    ctx.fillText('Thank you for your business! Support: support@campaignai.app', 40, height - 45);
-    ctx.fillText('CampaignAI © 2026 — All rights reserved', 40, height - 25);
+    ctx.fillText('Thank you for your business! Support: support@visionpilot.ai', 40, height - 45);
+    ctx.fillText('Visionpilot AI Technologies © 2026 — Meta Authorised AI Marketing Agent', 40, height - 25);
 
     const pdfBuffer = canvas.toBuffer('image/png');
     const fileName = `Invoice_${paymentId}_${Date.now()}.png`;

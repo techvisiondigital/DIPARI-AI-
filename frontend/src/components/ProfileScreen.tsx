@@ -910,36 +910,36 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ businessId, onToas
                 </button>
               </div>
 
-              {/* Pro Plan Card */}
+              {/* Advance Plan Card */}
               <div style={{ border: '2px solid #4f46e5', borderRadius: '12px', padding: '16px', textAlign: 'center', background: '#f5f3ff', position: 'relative' }}>
                 <div style={{ position: 'absolute', top: '-10px', left: '50%', transform: 'translateX(-50%)', background: '#4f46e5', color: '#ffffff', padding: '2px 8px', borderRadius: '9999px', fontSize: '0.55rem', fontWeight: 'bold' }}>
                   POPULAR
                 </div>
-                <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#4f46e5' }}>Pro</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#4f46e5' }}>Advance</span>
                 <div style={{ margin: '8px 0' }}>
-                  <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>₹4,900</span>
+                  <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>₹5,000</span>
                   <span style={{ fontSize: '0.7rem', color: '#64748b' }}>/month</span>
                 </div>
                 <button
                   onClick={() => handleUpgradePlan('PRO')}
                   style={{ width: '100%', padding: '6px', background: '#4f46e5', border: 'none', color: '#ffffff', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
                 >
-                  Choose Pro
+                  Choose Advance
                 </button>
               </div>
 
-              {/* Enterprise Plan Card */}
+              {/* Premium Plan Card */}
               <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px', textAlign: 'center', background: subscription.plan === 'ENTERPRISE' ? '#f5f3ff' : '#ffffff' }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#334155' }}>Enterprise</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#334155' }}>Premium</span>
                 <div style={{ margin: '8px 0' }}>
-                  <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>₹11,800</span>
+                  <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>₹10,000</span>
                   <span style={{ fontSize: '0.7rem', color: '#64748b' }}>/month</span>
                 </div>
                 <button
                   onClick={() => handleUpgradePlan('ENTERPRISE')}
                   style={{ width: '100%', padding: '6px', background: '#4f46e5', border: 'none', color: '#ffffff', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
                 >
-                  Choose Enterprise
+                  Choose Premium
                 </button>
               </div>
             </div>

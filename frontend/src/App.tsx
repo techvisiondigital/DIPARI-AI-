@@ -84,13 +84,13 @@ export default function App() {
   // Theme & Navigation State
   const [isLight, setIsLight] = useState(true);
   const [currentPage, setCurrentPage] = useState<'landing' | 'auth' | 'admin-login' | 'onboarding' | 'blueprint' | 'dashboard' | 'builder' | 'generator' | 'manager' | 'analytics' | 'support' | 'admin' | 'connect-meta' | 'calendar' | 'settings' | 'profile' | 'leads'>(() => {
-    const saved = localStorage.getItem('dipari_active_page');
+    const saved = (localStorage.getItem('visionpilot_active_page') || localStorage.getItem('dipari_active_page'));
     return (saved && saved !== 'auth' && saved !== 'admin-login' && saved !== 'scheduler' && saved !== 'instant-posts') ? (saved as any) : 'landing';
   });
 
   useEffect(() => {
     if (currentPage && currentPage !== 'auth' && currentPage !== 'admin-login') {
-      localStorage.setItem('dipari_active_page', currentPage);
+      localStorage.setItem('visionpilot_active_page', currentPage);
     }
   }, [currentPage]);
 
@@ -123,7 +123,7 @@ export default function App() {
   // Chat Assistant sliding drawer state
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<any[]>([
-    { role: 'model', content: "Hello! 👋 I am the official DIPARI AI Help Assistant. How can I help you with DIPARI AI today? Ask me about account setup, Meta integration, creating campaigns, content scheduling, lead CRM, analytics, or platform features!" }
+    { role: 'model', content: "Hello! 👋 I am the official Visionpilot AI Help Assistant (Meta authorised AI marketing agent). How can I help you with Visionpilot AI today? Ask me about account setup, Meta integration, creating campaigns, content scheduling, lead CRM, analytics, or platform features!" }
   ]);
   const [assistantInput, setAssistantInput] = useState('');
   const [currentConvoId, setCurrentConvoId] = useState<string | undefined>(undefined);
@@ -191,7 +191,7 @@ export default function App() {
           : [
               {
                 role: 'model',
-                content: `Welcome to DIPARI AI! 🚀 I'm your AI Marketing Manager. Let's learn about your business so I can build your customized marketing strategy.\n\n📌 Question 1 of ${questions.length}:\n${questions[0]}`
+                content: `Welcome to Visionpilot AI! 🚀 (Meta authorised AI marketing agent) I'm your AI Marketing Manager. Let's learn about your business so I can build your customized marketing strategy.\n\n📌 Question 1 of ${questions.length}:\n${questions[0]}`
               }
             ];
 
@@ -222,7 +222,7 @@ export default function App() {
         setChatbotMessages([
           {
             role: 'model',
-            content: `Welcome to DIPARI AI! 🚀 I'm your AI Marketing Manager. Let's learn about your business so I can build your customized marketing strategy.\n\n📌 Question 1 of ${questions.length}:\n${questions[0]}`
+            content: `Welcome to Visionpilot AI! 🚀 (Meta authorised AI marketing agent) I'm your AI Marketing Manager. Let's learn about your business so I can build your customized marketing strategy.\n\n📌 Question 1 of ${questions.length}:\n${questions[0]}`
           }
         ]);
       }
@@ -378,7 +378,7 @@ export default function App() {
                 } catch {
                   // Fallback
                 }
-                const savedPage = localStorage.getItem('dipari_active_page');
+                const savedPage = (localStorage.getItem('visionpilot_active_page') || localStorage.getItem('dipari_active_page'));
                 setCurrentPage((savedPage && savedPage !== 'auth' && savedPage !== 'landing') ? (savedPage as any) : 'admin');
               } else if (!res.onboardingCompleted) {
                 await initOnboarding(res.businessId);
@@ -389,7 +389,7 @@ export default function App() {
                 if (window.location.pathname === '/connect-meta') {
                   setCurrentPage('connect-meta');
                 } else {
-                  const savedPage = localStorage.getItem('dipari_active_page');
+                  const savedPage = (localStorage.getItem('visionpilot_active_page') || localStorage.getItem('dipari_active_page'));
                   setCurrentPage((savedPage && savedPage !== 'auth' && savedPage !== 'landing') ? (savedPage as any) : 'dashboard');
                 }
               }
@@ -411,7 +411,7 @@ export default function App() {
             const res = await api.auth.getProfile();
             setUser(res);
             
-            const savedPage = localStorage.getItem('dipari_active_page');
+            const savedPage = (localStorage.getItem('visionpilot_active_page') || localStorage.getItem('dipari_active_page'));
             if (res.role === 'ADMIN') {
               try {
                 const businesses = await api.admin.getBusinesses();
@@ -522,7 +522,7 @@ export default function App() {
     setUser(null);
     // Clear saved page so the next session starts at the landing page
     // (prevents stale dashboard/onboarding showing before auth resolves)
-    localStorage.removeItem('dipari_active_page');
+    localStorage.removeItem('visionpilot_active_page'); localStorage.removeItem('dipari_active_page');
     setChatbotMessages([]);
     setCurrentOnboardingIndex(0);
     setOnboardingProgress(0);
@@ -799,9 +799,14 @@ export default function App() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: '1.8rem' }}>🚀</span>
-              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.4rem', letterSpacing: '-0.04em' }}>
-                DIPARI <span className="text-gradient">AI</span>
-              </span>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.4rem', letterSpacing: '-0.04em', lineHeight: 1.1 }}>
+                  Visionpilot <span className="text-gradient">AI</span>
+                </span>
+                <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', fontWeight: 600, letterSpacing: '0.02em' }}>
+                  (Meta authorised Ai marketing agent)
+                </span>
+              </div>
             </div>
             <nav style={{ display: 'flex', gap: 32, fontWeight: 500, fontSize: '0.95rem' }}>
               <a href="#features" style={{ color: 'var(--color-text-muted)', textDecoration: 'none', transition: 'var(--transition-smooth)' }}>Features</a>
@@ -822,7 +827,7 @@ export default function App() {
               borderRadius: '99px', border: '1px solid var(--color-border)', background: 'rgba(255,255,255,0.03)',
               marginBottom: 32, fontSize: '0.85rem'
             }}>
-              <span style={{ color: 'var(--color-secondary)' }}>●</span> Powered by OpenRouter AI & Meta Graph APIs
+              <span style={{ color: 'var(--color-secondary)' }}>●</span> Meta Authorised AI Marketing Agent • Powered by AI & Meta Graph APIs
             </div>
             <h1 style={{
               fontSize: '4.5rem', fontWeight: 800, fontFamily: 'var(--font-display)',
@@ -844,7 +849,7 @@ export default function App() {
             </div>
 
             {/* Dashboard Mockup Showcase */}
-            <div style={{
+            <div id="features" style={{
               marginTop: 80, border: '1px solid var(--color-border)', borderRadius: 24,
               overflow: 'hidden', padding: 12, background: 'rgba(255, 255, 255, 0.02)',
               boxShadow: '0 30px 100px rgba(0,0,0,0.8)'
@@ -921,7 +926,17 @@ export default function App() {
                   <li>✓ No Ad campaign</li>
                   <li>✓ Experience the next generation Marketing</li>
                 </ul>
-                <button className="btn-secondary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => { setAuthView('register'); setCurrentPage('auth'); }}>Start Free Trial</button>
+                <button className="btn-secondary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => {
+                  if (user) {
+                    navigateWithProfileCheck('generator');
+                    addToast('Free Trial Active', 'You have access to the Basic Free 7-Day trial features.', 'info');
+                  } else {
+                    setAuthView('register');
+                    setCurrentPage('auth');
+                  }
+                }}>
+                  Start Free Trial
+                </button>
               </div>
 
               {/* Tile 2: Advance */}
@@ -941,7 +956,17 @@ export default function App() {
                   <li>✓ 24X7 support</li>
                   <li>✓ Visible growth in sales in 1 week</li>
                 </ul>
-                <button className="btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => { setAuthView('register'); setCurrentPage('auth'); }}>Select Plan</button>
+                <button className="btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => {
+                  if (user) {
+                    navigateWithProfileCheck('profile');
+                    addToast('Plan Upgrade', 'Select Advance (₹5,000) to proceed to Cashfree checkout.', 'info');
+                  } else {
+                    setAuthView('register');
+                    setCurrentPage('auth');
+                  }
+                }}>
+                  Select Plan
+                </button>
               </div>
 
               {/* Tile 3: Premium */}
@@ -958,7 +983,17 @@ export default function App() {
                   <li>✓ 24X7 support</li>
                   <li>✓ Visible growth in sales in 1 week</li>
                 </ul>
-                <button className="btn-primary" style={{ width: '100%', justifyContent: 'center', background: 'var(--color-secondary)' }} onClick={() => { setAuthView('register'); setCurrentPage('auth'); }}>Choose Premium</button>
+                <button className="btn-primary" style={{ width: '100%', justifyContent: 'center', background: 'var(--color-secondary)' }} onClick={() => {
+                  if (user) {
+                    navigateWithProfileCheck('profile');
+                    addToast('Plan Upgrade', 'Select Premium (₹10,000) to proceed to Cashfree checkout.', 'info');
+                  } else {
+                    setAuthView('register');
+                    setCurrentPage('auth');
+                  }
+                }}>
+                  Choose Premium
+                </button>
               </div>
 
               {/* Tile 4: Customized */}
@@ -971,7 +1006,13 @@ export default function App() {
                 <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20, fontSize: '0.85rem', color: 'var(--color-text-muted)', flex: 1, padding: 0 }}>
                   <li style={{ lineHeight: 1.5 }}>want to create a customized plan as per your budget then please contact us</li>
                 </ul>
-                <button className="btn-secondary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => { setAuthView('register'); setCurrentPage('auth'); }}>Contact Us</button>
+                <button className="btn-primary" style={{ width: '100%', justifyContent: 'center', background: '#22c55e', border: 'none' }} onClick={() => {
+                  setIsAssistantOpen(true);
+                  setAssistantInput('Hi! I would like to create a customized marketing plan for our business based on our budget.');
+                  addToast('Customization Request', 'Our AI Assistant is ready to help customize your plan, or email support@visionpilotai.com', 'info');
+                }}>
+                  Contact Us
+                </button>
               </div>
             </div>
           </section>
@@ -993,7 +1034,7 @@ export default function App() {
 
           {/* Footer */}
           <footer style={{ borderTop: '1px solid var(--color-border)', padding: '40px 8%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-            <span>© 2026 DIPARI AI Technologies. All rights reserved. Made for enterprise marketing automation.</span>
+            <span>© 2026 Visionpilot AI Technologies (Meta authorised Ai marketing agent). All rights reserved.</span>
             <button
               onClick={() => {
                 setAdminModalError('');
@@ -1062,7 +1103,7 @@ export default function App() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 40 }}>
                 <span style={{ fontSize: '1.4rem' }}>🚀</span>
-                <span style={{ fontWeight: 800 }}>DIPARI AI</span>
+                <div><div style={{ fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-0.02em' }}>Visionpilot AI</div><div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>(Meta authorised Ai marketing agent)</div></div>
               </div>
               <h3 style={{ fontSize: '1.2rem', marginBottom: 12 }}>Onboarding Chatbot</h3>
               <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
@@ -1241,7 +1282,7 @@ export default function App() {
                 {!sidebarCollapsed && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: '1.4rem' }}>🚀</span>
-                    <span style={{ fontWeight: 800, fontFamily: 'var(--font-display)' }}>DIPARI AI</span>
+                    <div><div style={{ fontWeight: 800, fontFamily: 'var(--font-display)', fontSize: '1.05rem', letterSpacing: '-0.02em', lineHeight: 1.1 }}>Visionpilot AI</div><div style={{ fontSize: '0.62rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>(Meta authorised Ai marketing agent)</div></div>
                   </div>
                 )}
                 <button style={{
@@ -2016,159 +2057,157 @@ export default function App() {
                 </div>
               </main>
             )}
-
           </div>
-
-          {/* --- FLOATING PERSISTENT AI CHAT ASSISTANT --- */}
-          <div style={{
-            position: 'fixed', bottom: 24, left: 24, zIndex: 999
-          }}>
-            {/* Round floating button */}
-            <button onClick={() => setIsAssistantOpen(!isAssistantOpen)} style={{
-              width: 56, height: 56, borderRadius: '50%', background: 'linear-gradient(135deg, var(--color-primary), var(--color-primary-light))',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: 'none', cursor: 'pointer',
-              boxShadow: '0 8px 30px rgba(99, 102, 241, 0.4)', transition: 'var(--transition-smooth)'
-            }}>
-              {isAssistantOpen ? <X size={22} /> : <MessageSquare size={22} />}
-            </button>
-
-            {/* Sliding drawer panel */}
-            {isAssistantOpen && (
-              <div style={{
-                position: 'absolute', bottom: 74, left: 0, width: 390, height: 530,
-                display: 'flex', flexDirection: 'column',
-                background: 'rgba(15, 23, 42, 0.96)', backdropFilter: 'blur(16px)',
-                border: '1px solid rgba(255, 255, 255, 0.12)', borderRadius: 24, overflow: 'hidden',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 30px rgba(99, 102, 241, 0.25)'
-              }}>
-                {/* Header */}
-                <div style={{
-                  padding: '16px 20px', background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{
-                      width: 40, height: 40, borderRadius: '50%',
-                      background: 'rgba(255, 255, 255, 0.2)', backdropFilter: 'blur(8px)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff',
-                      border: '1.5px solid rgba(255, 255, 255, 0.4)'
-                    }}>
-                      <Bot size={22} />
-                    </div>
-                    <div>
-                      <h4 style={{ fontSize: '0.98rem', fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>DIPARI Support Assistant</h4>
-                      <div style={{ fontSize: '0.72rem', color: '#e0e7ff', display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, fontWeight: 600 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#4ade80', boxShadow: '0 0 8px #4ade80' }}></span>
-                        Always Active • Instant AI Help
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setIsAssistantOpen(false)}
-                    style={{ background: 'transparent', border: 'none', color: '#ffffff', opacity: 0.8, cursor: 'pointer', padding: 4 }}
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-
-                {/* Quick Suggestion Pills */}
-                <div style={{ padding: '10px 14px 4px', display: 'flex', gap: 6, overflowX: 'auto', background: '#0f172a', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  {[
-                    { label: '🚀 Meta Connect', msg: 'How do I connect my Facebook & Instagram account?' },
-                    { label: '📅 Post Calendar', msg: 'How do scheduled posts work in the calendar?' },
-                    { label: '💳 Payment Help', msg: 'How do I upgrade or view my payment invoice?' }
-                  ].map((chip, cIdx) => (
-                    <button
-                      key={cIdx}
-                      type="button"
-                      onClick={() => setAssistantInput(chip.msg)}
-                      style={{
-                        padding: '5px 10px', fontSize: '0.7rem', fontWeight: 600, color: '#a5b4fc',
-                        background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)',
-                        borderRadius: 20, whiteSpace: 'nowrap', cursor: 'pointer'
-                      }}
-                    >
-                      {chip.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Messages list */}
-                <div style={{ flex: 1, padding: 16, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14, background: '#0f172a' }}>
-                  {chatMessages.map((m, idx) => (
-                    <div key={idx} style={{
-                      display: 'flex',
-                      justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start'
-                    }}>
-                      <div style={{
-                        maxWidth: '85%', padding: '11px 15px', borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                        fontSize: '0.85rem', lineHeight: '1.5',
-                        background: m.role === 'user' ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' : '#1e293b',
-                        color: '#ffffff', border: m.role === 'user' ? 'none' : '1px solid rgba(255, 255, 255, 0.08)',
-                        boxShadow: m.role === 'user' ? '0 4px 12px rgba(99, 102, 241, 0.3)' : '0 4px 12px rgba(0,0,0,0.3)'
-                      }}>
-                        {m.role === 'user' ? m.content : (() => {
-                          const raw = (m.content || '').replace(/\*\*/g, '');
-                          const lines = raw.split('\n');
-                          return lines.map((line: string, lIdx: number) => {
-                            const clean = line.replace(/^#{1,6}\s*/, '').trim();
-                            if (!clean && lIdx < lines.length - 1) return <div key={lIdx} style={{ height: 6 }} />;
-                            return (
-                              <div key={lIdx} style={{ marginBottom: 4, lineHeight: '1.5', color: '#f1f5f9' }}>
-                                {clean}
-                              </div>
-                            );
-                          });
-                        })()}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Input area */}
-                <form onSubmit={sendAssistantMessage} style={{ padding: '12px 14px', borderTop: '1px solid rgba(255, 255, 255, 0.08)', background: '#0f172a', display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <input
-                    placeholder="Ask DIPARI AI Assistant..."
-                    value={assistantInput}
-                    onChange={e => setAssistantInput(e.target.value)}
-                    style={{
-                      flex: 1,
-                      padding: '11px 16px',
-                      fontSize: '0.85rem',
-                      background: '#1e293b',
-                      color: '#ffffff',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      borderRadius: 9999,
-                      outline: 'none',
-                    }}
-                  />
-                  <button
-                    type="submit"
-                    style={{
-                      width: 42,
-                      height: 42,
-                      borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                      color: '#ffffff',
-                      border: 'none',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                      boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)'
-                    }}
-                  >
-                    <Send size={18} />
-                  </button>
-                </form>
-              </div>
-            )}
-          </div>
-
         </div>
       )}
+
+      {/* --- FLOATING PERSISTENT AI CHAT ASSISTANT --- */}
+      <div style={{
+        position: 'fixed', bottom: 24, left: 24, zIndex: 999
+      }}>
+        {/* Round floating button */}
+        <button onClick={() => setIsAssistantOpen(!isAssistantOpen)} style={{
+          width: 56, height: 56, borderRadius: '50%', background: 'linear-gradient(135deg, var(--color-primary), var(--color-primary-light))',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: 'none', cursor: 'pointer',
+          boxShadow: '0 8px 30px rgba(99, 102, 241, 0.4)', transition: 'var(--transition-smooth)'
+        }}>
+          {isAssistantOpen ? <X size={22} /> : <MessageSquare size={22} />}
+        </button>
+
+        {/* Sliding drawer panel */}
+        {isAssistantOpen && (
+          <div style={{
+            position: 'absolute', bottom: 74, left: 0, width: 390, height: 530,
+            display: 'flex', flexDirection: 'column',
+            background: 'rgba(15, 23, 42, 0.96)', backdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255, 255, 255, 0.12)', borderRadius: 24, overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 30px rgba(99, 102, 241, 0.25)'
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '16px 20px', background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: '50%',
+                  background: 'rgba(255, 255, 255, 0.2)', backdropFilter: 'blur(8px)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff',
+                  border: '1.5px solid rgba(255, 255, 255, 0.4)'
+                }}>
+                  <Bot size={22} />
+                </div>
+                <div>
+                  <h4 style={{ fontSize: '0.98rem', fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>Visionpilot Support Assistant</h4>
+                  <div style={{ fontSize: '0.72rem', color: '#e0e7ff', display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, fontWeight: 600 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#4ade80', boxShadow: '0 0 8px #4ade80' }}></span>
+                    Meta Authorised AI Marketing Agent • Active
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAssistantOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: '#ffffff', opacity: 0.8, cursor: 'pointer', padding: 4 }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Quick Suggestion Pills */}
+            <div style={{ padding: '10px 14px 4px', display: 'flex', gap: 6, overflowX: 'auto', background: '#0f172a', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              {[
+                { label: '🚀 Meta Connect', msg: 'How do I connect my Facebook & Instagram account?' },
+                { label: '📅 Post Calendar', msg: 'How do scheduled posts work in the calendar?' },
+                { label: '💳 Payment Help', msg: 'How do I upgrade or view my payment invoice?' }
+              ].map((chip, cIdx) => (
+                <button
+                  key={cIdx}
+                  type="button"
+                  onClick={() => setAssistantInput(chip.msg)}
+                  style={{
+                    padding: '5px 10px', fontSize: '0.7rem', fontWeight: 600, color: '#a5b4fc',
+                    background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)',
+                    borderRadius: 20, whiteSpace: 'nowrap', cursor: 'pointer'
+                  }}
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Messages list */}
+            <div style={{ flex: 1, padding: 16, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14, background: '#0f172a' }}>
+              {chatMessages.map((m, idx) => (
+                <div key={idx} style={{
+                  display: 'flex',
+                  justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start'
+                }}>
+                  <div style={{
+                    maxWidth: '85%', padding: '11px 15px', borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                    fontSize: '0.85rem', lineHeight: '1.5',
+                    background: m.role === 'user' ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' : '#1e293b',
+                    color: '#ffffff', border: m.role === 'user' ? 'none' : '1px solid rgba(255, 255, 255, 0.08)',
+                    boxShadow: m.role === 'user' ? '0 4px 12px rgba(99, 102, 241, 0.3)' : '0 4px 12px rgba(0,0,0,0.3)'
+                  }}>
+                    {m.role === 'user' ? m.content : (() => {
+                      const raw = (m.content || '').replace(/\*\*/g, '');
+                      const lines = raw.split('\n');
+                      return lines.map((line: string, lIdx: number) => {
+                        const clean = line.replace(/^#{1,6}\s*/, '').trim();
+                        if (!clean && lIdx < lines.length - 1) return <div key={lIdx} style={{ height: 6 }} />;
+                        return (
+                          <div key={lIdx} style={{ marginBottom: 4, lineHeight: '1.5', color: '#f1f5f9' }}>
+                            {clean}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Input area */}
+            <form onSubmit={sendAssistantMessage} style={{ padding: '12px 14px', borderTop: '1px solid rgba(255, 255, 255, 0.08)', background: '#0f172a', display: 'flex', gap: 10, alignItems: 'center' }}>
+              <input
+                placeholder="Ask Visionpilot AI Assistant..."
+                value={assistantInput}
+                onChange={e => setAssistantInput(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '11px 16px',
+                  fontSize: '0.85rem',
+                  background: '#1e293b',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: 9999,
+                  outline: 'none',
+                }}
+              />
+              <button
+                type="submit"
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)'
+                }}
+              >
+                <Send size={18} />
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
 
       {/* --- ADMIN LOGIN MODAL OVERLAY --- */}
       {isAdminModalOpen && (

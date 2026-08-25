@@ -471,7 +471,7 @@ export default function CampaignGenerator({ businessId, addToast, onDraftGenerat
                 <div>
                   <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#818cf8', display: 'block', textTransform: 'uppercase', marginBottom: '4px' }}>Pro Campaign</span>
                   <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0 0 12px 0' }}>Advance</h3>
-                  <div style={{ fontSize: '1.75rem', fontWeight: '900', margin: '16px 0', color: '#a5b4fc' }}>₹5,900</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: '900', margin: '16px 0', color: '#a5b4fc' }}>₹5,000</div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.8rem', color: '#cbd5e1', flex: 1 }}>
                   <div>✓ 3 post (2 standard, 1 carrousal) / week</div>
@@ -479,27 +479,13 @@ export default function CampaignGenerator({ businessId, addToast, onDraftGenerat
                   <div>✓ 15 days Ad campaign</div>
                   <div>✓ 24X7 support</div>
                   <div>✓ Visible growth in sales in 1 week</div>
-                  <div style={{ borderTop: '1px dashed #475569', paddingTop: '10px', marginTop: '4px', fontSize: '0.75rem', color: '#94a3b8' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span>Ad Budget:</span>
-                      <strong style={{ color: '#e2e8f0' }}>₹3,540</strong>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span>API Cost:</span>
-                      <strong style={{ color: '#e2e8f0' }}>₹613.6</strong>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #334155', paddingTop: '4px', marginTop: '4px' }}>
-                      <span>Total cost:</span>
-                      <strong style={{ color: '#818cf8' }}>₹4,153.6</strong>
-                    </div>
-                  </div>
                 </div>
                 <button 
                   onClick={() => handlePlanPurchase('PRO', 'Advance')}
                   disabled={paymentPlan !== null}
                   style={{ width: '100%', padding: '10px', background: '#6366f1', color: '#ffffff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.8rem', cursor: paymentPlan ? 'wait' : 'pointer', opacity: paymentPlan && paymentPlan !== 'PRO' ? 0.6 : 1 }}
                 >
-                  {paymentPlan === 'PRO' ? 'Preparing checkout…' : 'Choose Advance (₹5,900)'}
+                  {paymentPlan === 'PRO' ? 'Preparing checkout…' : 'Choose Advance (₹5,000)'}
                 </button>
               </div>
 
@@ -508,7 +494,7 @@ export default function CampaignGenerator({ businessId, addToast, onDraftGenerat
                 <div>
                   <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#818cf8', display: 'block', textTransform: 'uppercase', marginBottom: '4px' }}>Enterprise Scale</span>
                   <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0 0 12px 0' }}>Premium</h3>
-                  <div style={{ fontSize: '1.75rem', fontWeight: '900', margin: '16px 0' }}>₹11,800</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: '900', margin: '16px 0' }}>₹10,000</div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.8rem', color: '#cbd5e1', flex: 1 }}>
                   <div>✓ 5 post (2 standard, 1 carrousal) / week</div>
@@ -516,27 +502,13 @@ export default function CampaignGenerator({ businessId, addToast, onDraftGenerat
                   <div>✓ 30 days Ad campaign</div>
                   <div>✓ 24X7 support</div>
                   <div>✓ Visible growth in sales in 1 week</div>
-                  <div style={{ borderTop: '1px dashed #475569', paddingTop: '10px', marginTop: '4px', fontSize: '0.75rem', color: '#94a3b8' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span>Ad Budget:</span>
-                      <strong style={{ color: '#e2e8f0' }}>₹7,080</strong>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span>API Cost:</span>
-                      <strong style={{ color: '#e2e8f0' }}>₹1,227.2</strong>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #334155', paddingTop: '4px', marginTop: '4px' }}>
-                      <span>Total cost:</span>
-                      <strong style={{ color: '#818cf8' }}>₹8,307.2</strong>
-                    </div>
-                  </div>
                 </div>
                 <button 
                   onClick={() => handlePlanPurchase('ENTERPRISE', 'Premium')}
                   disabled={paymentPlan !== null}
                   style={{ width: '100%', padding: '10px', background: '#4f46e5', color: '#ffffff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.8rem', cursor: paymentPlan ? 'wait' : 'pointer', opacity: paymentPlan && paymentPlan !== 'ENTERPRISE' ? 0.6 : 1 }}
                 >
-                  {paymentPlan === 'ENTERPRISE' ? 'Preparing checkout…' : 'Choose Premium (₹11,800)'}
+                  {paymentPlan === 'ENTERPRISE' ? 'Preparing checkout…' : 'Choose Premium (₹10,000)'}
                 </button>
               </div>
 
@@ -554,7 +526,7 @@ export default function CampaignGenerator({ businessId, addToast, onDraftGenerat
                 </div>
                 <button 
                   onClick={() => { addToast('Request Submitted', 'Our customization team will reach out to you shortly.', 'success'); setIsPostingModalOpen(false); }}
-                  style={{ width: '100%', padding: '10px', background: '#334155', color: '#ffffff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.8rem', cursor: 'pointer' }}
+                  style={{ width: '100%', padding: '10px', background: '#22c55e', color: '#ffffff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.8rem', cursor: 'pointer' }}
                 >
                   Contact Us
                 </button>
