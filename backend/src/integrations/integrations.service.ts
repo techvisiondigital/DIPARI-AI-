@@ -315,7 +315,8 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
   getMetaAuthUrl(businessId: string): string {
     const appId = process.env.META_APP_ID;
-    const redirectUri = process.env.META_REDIRECT_URI || 'http://localhost:3000/meta/callback';
+    const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const redirectUri = process.env.META_REDIRECT_URI || `${frontendUrl}/meta/callback`;
     const state = Buffer.from(JSON.stringify({ businessId, ts: Date.now() })).toString('base64');
     
     if (this.isMock) {
