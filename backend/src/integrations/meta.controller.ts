@@ -7,9 +7,12 @@ export class MetaController {
   constructor(private readonly integrationsService: IntegrationsService) {}
 
   @Get('auth-url')
-  getAuthUrl(@Query('businessId') businessId: string) {
+  getAuthUrl(
+    @Query('businessId') businessId: string,
+    @Query('redirectUri') redirectUri?: string,
+  ) {
     if (!businessId) throw new HttpException('Missing businessId', HttpStatus.BAD_REQUEST);
-    return { url: this.integrationsService.getMetaAuthUrl(businessId) };
+    return { url: this.integrationsService.getMetaAuthUrl(businessId, redirectUri) };
   }
 
   /**
@@ -27,12 +30,13 @@ export class MetaController {
     @Query('error') error: string,
     @Res() res: Response,
   ) {
+    const frontendBase = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
     if (error) {
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/connect-meta?error=${encodeURIComponent(error)}`);
+      return res.redirect(`${frontendBase}/connect-meta?error=${encodeURIComponent(error)}`);
     }
 
     if (!code || !state) {
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/connect-meta?error=missing_params`);
+      return res.redirect(`${frontendBase}/connect-meta?error=missing_params`);
     }
 
     try {
@@ -40,28 +44,35 @@ export class MetaController {
       const stateData = JSON.parse(Buffer.from(state, 'base64').toString('utf8'));
       const businessId = stateData.businessId;
 
+      if (!businessId) {
+        return res.redirect(`${frontendBase}/connect-meta?error=invalid_state`);
+      }
+
+      // Exchange code for token
       const result = await this.integrationsService.connectMeta(code, businessId);
-      return res.redirect(
-        `${process.env.FRONTEND_URL || 'http://localhost:3000'}/connect-meta?success=true&message=${encodeURIComponent(result.message)}`
-      );
-    } catch (error: any) {
-      return res.redirect(
-        `${process.env.FRONTEND_URL || 'http://localhost:3000'}/connect-meta?error=${encodeURIComponent(error.message)}`
-      );
+
+      if (result.success) {
+        return res.redirect(`${frontendBase}/connect-meta?meta_connected=true`);
+      } else {
+        return res.redirect(`${frontendBase}/connect-meta?error=${encodeURIComponent(result.message || 'Connection failed')}`);
+      }
+    } catch (err: any) {
+      return res.redirect(`${frontendBase}/connect-meta?error=${encodeURIComponent(err.message || 'OAuth exchange failed')}`);
     }
   }
 
   /**
-   * API callback — frontend calls this with the code after intercepting the redirect.
+   * SPA callback handler — called by the frontend React app when it receives the OAuth code.
    */
   @Post('callback')
-  async handleCallback(@Body() body: { code: string, businessId: string }) {
+  async handleCallbackPost(
+    @Body() body: { code: string; businessId: string; redirectUri?: string },
+  ) {
     if (!body.code || !body.businessId) {
       throw new HttpException('Missing code or businessId', HttpStatus.BAD_REQUEST);
     }
-    
     try {
-      const result = await this.integrationsService.connectMeta(body.code, body.businessId);
+      const result = await this.integrationsService.connectMeta(body.code, body.businessId, body.redirectUri);
       return result;
     } catch (error: any) {
       throw new HttpException(error.message || 'Failed to connect Meta', HttpStatus.INTERNAL_SERVER_ERROR);

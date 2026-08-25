@@ -313,10 +313,10 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
   // ─── Meta Auth & Connection Layer ─────────────────────────────────────────────
 
-  getMetaAuthUrl(businessId: string): string {
+  getMetaAuthUrl(businessId: string, customRedirectUri?: string): string {
     const appId = process.env.META_APP_ID;
     const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
-    const redirectUri = process.env.META_REDIRECT_URI || `${frontendUrl}/meta/callback`;
+    const redirectUri = customRedirectUri || process.env.META_REDIRECT_URI || `${frontendUrl}/meta/callback`;
     const state = Buffer.from(JSON.stringify({ businessId, ts: Date.now() })).toString('base64');
     
     if (this.isMock) {
@@ -335,7 +335,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     return `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopesStr}&response_type=code&state=${state}&auth_type=rerequest`;
   }
 
-  async connectMeta(code: string, businessId: string) {
+  async connectMeta(code: string, businessId: string, customRedirectUri?: string) {
     const exchangeKey = `${businessId}:${code}`;
     const existingExchange = this.metaOAuthExchanges.get(exchangeKey);
     if (existingExchange) {
@@ -343,7 +343,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       return existingExchange;
     }
 
-    const exchange = this.connectMetaOnce(code, businessId);
+    const exchange = this.connectMetaOnce(code, businessId, customRedirectUri);
     this.metaOAuthExchanges.set(exchangeKey, exchange);
     try {
       return await exchange;
@@ -352,7 +352,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     }
   }
 
-  private async connectMetaOnce(code: string, businessId: string) {
+  private async connectMetaOnce(code: string, businessId: string, customRedirectUri?: string) {
     if (this.isMock || code.startsWith('mock_') || code.startsWith('oauth_code_test_')) {
       this.logger.log(`[MOCK] Connecting Meta for business ${businessId}`);
       const mockMetaUser = 'mock_meta_user_123';
@@ -375,7 +375,8 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     try {
       const appId = process.env.META_APP_ID;
       const appSecret = process.env.META_APP_SECRET;
-      const redirectUri = process.env.META_REDIRECT_URI || 'http://localhost:3000/meta/callback';
+      const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+      const redirectUri = customRedirectUri || process.env.META_REDIRECT_URI || `${frontendUrl}/meta/callback`;
 
       if (!appId || !appSecret) {
         throw new HttpException('META_APP_ID or META_APP_SECRET missing in backend environment', HttpStatus.BAD_REQUEST);

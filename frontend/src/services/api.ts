@@ -960,7 +960,8 @@ export const api = {
 
   meta: {
     async getAuthUrl(businessId: string) {
-      const res = await fetch(`${BASE_URL}/meta/auth-url?businessId=${businessId}`, {
+      const redirectUri = window.location.origin + '/meta/callback';
+      const res = await fetch(`${BASE_URL}/meta/auth-url?businessId=${businessId}&redirectUri=${encodeURIComponent(redirectUri)}`, {
         headers: getHeaders(),
       });
       const data = await handleResponse(res);
@@ -968,10 +969,11 @@ export const api = {
     },
 
     async connect(code: string, businessId: string) {
+      const redirectUri = window.location.origin + '/meta/callback';
       const res = await fetch(`${BASE_URL}/meta/callback`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ code, businessId }),
+        body: JSON.stringify({ code, businessId, redirectUri }),
       });
       return await handleResponse(res);
     },
