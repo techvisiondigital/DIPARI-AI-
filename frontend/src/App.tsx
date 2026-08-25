@@ -803,8 +803,8 @@ export default function App() {
                 <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.4rem', letterSpacing: '-0.04em', lineHeight: 1.1 }}>
                   Visionpilot <span className="text-gradient">AI</span>
                 </span>
-                <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', fontWeight: 600, letterSpacing: '0.02em' }}>
-                  (Meta authorised Ai marketing agent)
+                <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 600, letterSpacing: '0.02em' }}>
+                  Meta authorised AI marketing agent
                 </span>
               </div>
             </div>
@@ -827,7 +827,7 @@ export default function App() {
               borderRadius: '99px', border: '1px solid var(--color-border)', background: 'rgba(255,255,255,0.03)',
               marginBottom: 32, fontSize: '0.85rem'
             }}>
-              <span style={{ color: 'var(--color-secondary)' }}>●</span> Meta Authorised AI Marketing Agent • Powered by AI & Meta Graph APIs
+              <span style={{ color: 'var(--color-secondary)' }}>●</span> Meta Authorised AI Marketing Agent
             </div>
             <h1 style={{
               fontSize: '4.5rem', fontWeight: 800, fontFamily: 'var(--font-display)',
@@ -912,21 +912,33 @@ export default function App() {
           <section id="pricing" style={{ padding: '80px 8%', textAlign: 'center', borderTop: '1px solid var(--color-border)' }}>
             <h2 style={{ fontSize: '2.5rem', fontFamily: 'var(--font-display)', marginBottom: 12 }}>Transparent Scaling Plans</h2>
             <p style={{ color: 'var(--color-text-muted)', marginBottom: 60 }}>Choose the strategy that aligns with your ad accounts budget caps.</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 24, maxWidth: 1200, margin: '0 auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 24, maxWidth: 1240, margin: '0 auto', alignItems: 'stretch' }}>
               {/* Tile 1: Basic */}
-              <div className="glass-panel" style={{ padding: 30, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--color-primary)', textTransform: 'uppercase', marginBottom: 4 }}>Free Plan</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>Basic (Free 7 days trial)</div>
-                  <div style={{ fontSize: '2rem', fontWeight: 800, margin: '16px 0' }}>Free</div>
+              <div className="glass-panel" style={{ padding: '32px 26px', textAlign: 'left', display: 'flex', flexDirection: 'column', borderRadius: 20, position: 'relative' }}>
+                <div style={{ minHeight: 120 }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Free Plan</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, minHeight: 32 }}>Basic (Free 7 days trial)</div>
+                  <div style={{ fontSize: '2.2rem', fontWeight: 900, marginTop: 12 }}>Free</div>
                 </div>
-                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20, fontSize: '0.85rem', color: 'var(--color-text-muted)', flex: 1, padding: 0 }}>
-                  <li>✓ 3 post (2 standard, 1 carrousal) / week</li>
-                  <li>✓ graphics regeneration 3 times</li>
-                  <li>✓ No Ad campaign</li>
-                  <li>✓ Experience the next generation Marketing</li>
+                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 12, margin: '24px 0', fontSize: '0.86rem', color: 'var(--color-text-muted)', flex: 1, padding: 0 }}>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
+                    <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                    <span>3 post (2 standard, 1 carrousal) / week</span>
+                  </li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
+                    <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                    <span>graphics regeneration 3 times</span>
+                  </li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
+                    <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '1.1rem', lineHeight: 1 }}>✕</span>
+                    <span style={{ color: '#ef4444', fontWeight: 600 }}>No Ad campaign</span>
+                  </li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
+                    <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                    <span>Experience the next generation Marketing</span>
+                  </li>
                 </ul>
-                <button className="btn-secondary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => {
+                <button className="btn-secondary" style={{ width: '100%', justifyContent: 'center', padding: '12px', fontWeight: 700 }} onClick={() => {
                   if (user) {
                     navigateWithProfileCheck('generator');
                     addToast('Free Trial Active', 'You have access to the Basic Free 7-Day trial features.', 'info');
@@ -940,23 +952,38 @@ export default function App() {
               </div>
 
               {/* Tile 2: Advance */}
-              <div className="glass-panel" style={{ padding: 30, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 20, border: '1px solid var(--color-primary)', boxShadow: '0 0 30px rgba(99, 102, 241, 0.1)' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--color-primary)', textTransform: 'uppercase' }}>Pro Campaign</span>
-                    <span style={{ background: 'var(--color-primary)', fontSize: '0.7rem', padding: '3px 8px', borderRadius: 99, color: 'white', fontWeight: 'bold' }}>POPULAR</span>
+              <div className="glass-panel" style={{ padding: '32px 26px', textAlign: 'left', display: 'flex', flexDirection: 'column', borderRadius: 20, border: '2px solid var(--color-primary)', boxShadow: '0 0 35px rgba(99, 102, 241, 0.15)', position: 'relative' }}>
+                <div style={{ minHeight: 120 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pro Campaign</span>
+                    <span style={{ background: 'var(--color-primary)', fontSize: '0.68rem', padding: '3px 9px', borderRadius: 99, color: 'white', fontWeight: 800 }}>POPULAR</span>
                   </div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 4 }}>Advance</div>
-                  <div style={{ fontSize: '2rem', fontWeight: 800, margin: '16px 0', color: 'var(--color-primary-light)' }}>₹5,000</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, minHeight: 32 }}>Advance</div>
+                  <div style={{ fontSize: '2.2rem', fontWeight: 900, marginTop: 12, color: 'var(--color-primary-light)' }}>₹5,000</div>
                 </div>
-                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20, fontSize: '0.85rem', color: 'var(--color-text-muted)', flex: 1, padding: 0 }}>
-                  <li>✓ 3 post (2 standard, 1 carrousal) / week</li>
-                  <li>✓ graphics regeneration 3 times</li>
-                  <li>✓ 15 days Ad campaign</li>
-                  <li>✓ 24X7 support</li>
-                  <li>✓ Visible growth in sales in 1 week</li>
+                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 12, margin: '24px 0', fontSize: '0.86rem', color: 'var(--color-text-muted)', flex: 1, padding: 0 }}>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
+                    <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                    <span>3 post (2 standard, 1 carrousal) / week</span>
+                  </li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
+                    <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                    <span>graphics regeneration 3 times</span>
+                  </li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
+                    <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                    <span>15 days Ad campaign</span>
+                  </li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
+                    <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                    <span>24X7 support</span>
+                  </li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
+                    <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                    <span>Visible growth in sales in 1 week</span>
+                  </li>
                 </ul>
-                <button className="btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => {
+                <button className="btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '12px', fontWeight: 700 }} onClick={() => {
                   if (user) {
                     navigateWithProfileCheck('profile');
                     addToast('Plan Upgrade', 'Select Advance (₹5,000) to proceed to Cashfree checkout.', 'info');
@@ -970,20 +997,35 @@ export default function App() {
               </div>
 
               {/* Tile 3: Premium */}
-              <div className="glass-panel" style={{ padding: 30, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--color-primary)', textTransform: 'uppercase', marginBottom: 4 }}>Enterprise Scale</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>Premium</div>
-                  <div style={{ fontSize: '2rem', fontWeight: 800, margin: '16px 0' }}>₹10,000</div>
+              <div className="glass-panel" style={{ padding: '32px 26px', textAlign: 'left', display: 'flex', flexDirection: 'column', borderRadius: 20, position: 'relative' }}>
+                <div style={{ minHeight: 120 }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Enterprise Scale</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, minHeight: 32 }}>Premium</div>
+                  <div style={{ fontSize: '2.2rem', fontWeight: 900, marginTop: 12 }}>₹10,000</div>
                 </div>
-                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20, fontSize: '0.85rem', color: 'var(--color-text-muted)', flex: 1, padding: 0 }}>
-                  <li>✓ 5 post (2 standard, 1 carrousal) / week</li>
-                  <li>✓ graphics regeneration 3 times</li>
-                  <li>✓ 30 days Ad campaign</li>
-                  <li>✓ 24X7 support</li>
-                  <li>✓ Visible growth in sales in 1 week</li>
+                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 12, margin: '24px 0', fontSize: '0.86rem', color: 'var(--color-text-muted)', flex: 1, padding: 0 }}>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
+                    <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                    <span>5 post (2 standard, 1 carrousal) / week</span>
+                  </li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
+                    <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                    <span>graphics regeneration 3 times</span>
+                  </li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
+                    <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                    <span>30 days Ad campaign</span>
+                  </li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
+                    <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                    <span>24X7 support</span>
+                  </li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
+                    <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                    <span>Visible growth in sales in 1 week</span>
+                  </li>
                 </ul>
-                <button className="btn-primary" style={{ width: '100%', justifyContent: 'center', background: 'var(--color-secondary)' }} onClick={() => {
+                <button className="btn-primary" style={{ width: '100%', justifyContent: 'center', background: 'var(--color-secondary)', padding: '12px', fontWeight: 700 }} onClick={() => {
                   if (user) {
                     navigateWithProfileCheck('profile');
                     addToast('Plan Upgrade', 'Select Premium (₹10,000) to proceed to Cashfree checkout.', 'info');
@@ -997,16 +1039,18 @@ export default function App() {
               </div>
 
               {/* Tile 4: Customized */}
-              <div className="glass-panel" style={{ padding: 30, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--color-primary)', textTransform: 'uppercase', marginBottom: 4 }}>Flexible Budget</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>Customized</div>
-                  <div style={{ fontSize: '1.75rem', fontWeight: 800, margin: '16px 0' }}>Contact us</div>
+              <div className="glass-panel" style={{ padding: '32px 26px', textAlign: 'left', display: 'flex', flexDirection: 'column', borderRadius: 20, position: 'relative' }}>
+                <div style={{ minHeight: 120 }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Flexible Budget</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, minHeight: 32 }}>Customized</div>
+                  <div style={{ fontSize: '2.2rem', fontWeight: 900, marginTop: 12, color: 'var(--color-text)' }}>Contact us</div>
                 </div>
-                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20, fontSize: '0.85rem', color: 'var(--color-text-muted)', flex: 1, padding: 0 }}>
-                  <li style={{ lineHeight: 1.5 }}>want to create a customized plan as per your budget then please contact us</li>
+                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 12, margin: '24px 0', fontSize: '0.88rem', color: 'var(--color-text-muted)', flex: 1, padding: 0 }}>
+                  <li style={{ lineHeight: 1.6, padding: '12px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid var(--color-border)' }}>
+                    Want to create a customized plan as per your budget? Please contact our team.
+                  </li>
                 </ul>
-                <button className="btn-primary" style={{ width: '100%', justifyContent: 'center', background: '#22c55e', border: 'none' }} onClick={() => {
+                <button className="btn-primary" style={{ width: '100%', justifyContent: 'center', background: '#22c55e', border: 'none', padding: '12px', fontWeight: 700, boxShadow: '0 4px 14px rgba(34, 197, 94, 0.3)' }} onClick={() => {
                   setIsAssistantOpen(true);
                   setAssistantInput('Hi! I would like to create a customized marketing plan for our business based on our budget.');
                   addToast('Customization Request', 'Our AI Assistant is ready to help customize your plan, or email support@visionpilotai.com', 'info');
@@ -1034,7 +1078,7 @@ export default function App() {
 
           {/* Footer */}
           <footer style={{ borderTop: '1px solid var(--color-border)', padding: '40px 8%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-            <span>© 2026 Visionpilot AI Technologies (Meta authorised Ai marketing agent). All rights reserved.</span>
+            <span>© 2026 Visionpilot AI Technologies • Meta Authorised AI Marketing Agent. All rights reserved.</span>
             <button
               onClick={() => {
                 setAdminModalError('');
@@ -1103,7 +1147,7 @@ export default function App() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 40 }}>
                 <span style={{ fontSize: '1.4rem' }}>🚀</span>
-                <div><div style={{ fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-0.02em' }}>Visionpilot AI</div><div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>(Meta authorised Ai marketing agent)</div></div>
+                <div><div style={{ fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-0.02em' }}>Visionpilot AI</div><div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Meta authorised AI marketing agent</div></div>
               </div>
               <h3 style={{ fontSize: '1.2rem', marginBottom: 12 }}>Onboarding Chatbot</h3>
               <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
@@ -1282,7 +1326,7 @@ export default function App() {
                 {!sidebarCollapsed && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: '1.4rem' }}>🚀</span>
-                    <div><div style={{ fontWeight: 800, fontFamily: 'var(--font-display)', fontSize: '1.05rem', letterSpacing: '-0.02em', lineHeight: 1.1 }}>Visionpilot AI</div><div style={{ fontSize: '0.62rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>(Meta authorised Ai marketing agent)</div></div>
+                    <div><div style={{ fontWeight: 800, fontFamily: 'var(--font-display)', fontSize: '1.05rem', letterSpacing: '-0.02em', lineHeight: 1.1 }}>Visionpilot AI</div><div style={{ fontSize: '0.62rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Meta authorised AI marketing agent</div></div>
                   </div>
                 )}
                 <button style={{
