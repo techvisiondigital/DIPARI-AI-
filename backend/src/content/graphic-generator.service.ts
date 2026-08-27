@@ -1,6 +1,76 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { createCanvas, loadImage } from '@napi-rs/canvas';
+import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
 import axios from 'axios';
+
+/**
+ * @napi-rs/canvas bundles a rendering engine but NO fonts — it relies on fonts
+ * installed on the host. The production image is node:20-alpine, which ships
+ * with none, so every ctx.fillText() drew nothing: generated banners came out
+ * with the layout frame, an empty text panel, an unlabelled button and a blank
+ * contact bar. Fonts are now installed in the Dockerfile and registered here.
+ */
+let RESOLVED_FONT_FAMILY = 'sans-serif';
+let FONTS_READY = false;
+
+function initFonts(logger: Logger): void {
+  if (FONTS_READY) return;
+  FONTS_READY = true;
+
+  const dirs = ['/usr/share/fonts', '/usr/local/share/fonts', 'C:\\Windows\\Fonts'];
+  let loaded = 0;
+  for (const dir of dirs) {
+    try {
+      const n = GlobalFonts.loadFontsFromDir(dir);
+      if (typeof n === 'number') loaded += n;
+    } catch {
+      // Directory absent on this platform — try the next one.
+    }
+  }
+
+  let families: string[] = [];
+  try {
+    families = (GlobalFonts.families || []).map((f: any) => f.family).filter(Boolean);
+  } catch {
+    families = [];
+  }
+
+  // Prefer a known-good sans face; fall back to whatever actually loaded.
+  const preferred = [
+    'DejaVu Sans', 'Liberation Sans', 'Noto Sans', 'FreeSans',
+    'Arial', 'Helvetica', 'Segoe UI',
+  ];
+  const match = preferred.find((p) => families.includes(p)) || families[0];
+  if (match) RESOLVED_FONT_FAMILY = match;
+
+  if (!families.length) {
+    logger.error(
+      '[GraphicGeneratorService] No fonts available to the canvas renderer. Text will NOT appear on generated images. Install a font package (Alpine: apk add font-dejavu fontconfig).',
+    );
+  } else {
+    logger.log(
+      `[GraphicGeneratorService] Registered ${loaded} font file(s); ${families.length} family/families available. Using "${RESOLVED_FONT_FAMILY}".`,
+    );
+  }
+}
+
+/** Builds a canvas font string using the family that is actually available. */
+function font(weightAndSize: string): string {
+  return `${weightAndSize} "${RESOLVED_FONT_FAMILY}", sans-serif`;
+}
+
+/**
+ * DejaVu and the other bundled faces have no emoji glyphs, so emoji in canvas
+ * text render as blank space or tofu boxes. Strip them from drawn strings.
+ */
+function stripEmoji(text: string): string {
+  return String(text ?? '')
+    .replace(
+      /[\u{1F300}-\u{1FAFF}\u{1F000}-\u{1F2FF}\u{2600}-\u{27BF}\u{FE0F}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}]/gu,
+      '',
+    )
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
 
 export interface BrandedGraphicOptions {
   businessName: string;
@@ -42,6 +112,10 @@ export interface VibePalette {
 @Injectable()
 export class GraphicGeneratorService {
   private readonly logger = new Logger(GraphicGeneratorService.name);
+
+  constructor() {
+    initFonts(this.logger);
+  }
 
   /**
    * Returns tailored color palettes based on user brand colors or brand vibe.
@@ -158,8 +232,12 @@ export class GraphicGeneratorService {
         for (let attempt = 1; attempt <= 2; attempt++) {
           try {
             const response = await axios.get(fetchUrl, {
+              // Pollinations renders the image on demand when the URL is first
+              // requested, which regularly takes 10-30s for a long prompt. The
+              // old 5s timeout aborted most of those, so the branded graphic
+              // was composited over a bare gradient with no photo behind it.
               responseType: 'arraybuffer',
-              timeout: 5_000,
+              timeout: 45_000,
               headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                 'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
@@ -309,7 +387,7 @@ export class GraphicGeneratorService {
 
     // Category / Niche Pill (Top Right)
     const categoryText = (data.niche || 'EXCLUSIVE PROMOTION').toUpperCase();
-    ctx.font = 'bold 22px sans-serif';
+    ctx.font = font('bold 22px');
     const catW = ctx.measureText(categoryText).width + 36;
     const catX = width - 50 - catW;
     const catY = headerY + 8;
@@ -334,10 +412,10 @@ export class GraphicGeneratorService {
     if (!logoDrawn) {
       const busNameStr = (data.businessName || 'BRAND').toUpperCase();
       ctx.fillStyle = palette.textColor;
-      ctx.font = 'bold 30px sans-serif';
+      ctx.font = font('bold 30px');
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(`✨ ${busNameStr}`, 50, headerY + 28);
+      ctx.fillText(stripEmoji(busNameStr), 50, headerY + 28);
     }
 
     // 4. Central / Lower Glassmorphism Card Frame for Marketing Copy
@@ -361,7 +439,7 @@ export class GraphicGeneratorService {
     let currentY = cardY + 40;
 
     ctx.fillStyle = palette.accent;
-    ctx.font = 'bold 22px sans-serif';
+    ctx.font = font('bold 22px');
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillText((data.businessName || 'PROMOTION').toUpperCase(), width / 2, currentY);
@@ -369,7 +447,7 @@ export class GraphicGeneratorService {
 
     // Main Headline Text
     ctx.fillStyle = palette.textColor;
-    ctx.font = 'bold 36px sans-serif';
+    ctx.font = font('bold 36px');
     const mainHeadline = data.headline || data.offerText || 'SPECIAL OFFER';
     currentY = this.drawWrappedText(ctx, mainHeadline, width / 2, currentY, cardW - 60, 44);
     currentY += 16;
@@ -377,9 +455,9 @@ export class GraphicGeneratorService {
     // Offer / Description Subheading
     if (data.description || data.offerText) {
       ctx.fillStyle = palette.subtextColor;
-      ctx.font = 'bold 22px sans-serif';
+      ctx.font = font('bold 22px');
       const descText = data.description || `Special Offer: ${data.offerText}`;
-      currentY = this.drawWrappedText(ctx, `🔥 ${descText}`, width / 2, currentY, cardW - 80, 30);
+      currentY = this.drawWrappedText(ctx, stripEmoji(descText), width / 2, currentY, cardW - 80, 30);
       currentY += 24;
     }
 
@@ -410,10 +488,10 @@ export class GraphicGeneratorService {
 
     const rawCta = (data.ctaType || 'CLAIM OFFER NOW').replace(/_/g, ' ');
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px sans-serif';
+    ctx.font = font('bold 22px');
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`👉 ${rawCta.toUpperCase()}`, width / 2, btnY + 25);
+    ctx.fillText(stripEmoji(rawCta).toUpperCase(), width / 2, btnY + 25);
 
     // 7. Contact Details High-Contrast Footer Section
     const phone = data.phone || data.contactDetails?.phone;
@@ -421,13 +499,13 @@ export class GraphicGeneratorService {
     const email = data.email || data.contactDetails?.email;
 
     const contactParts: string[] = [];
-    if (phone && phone !== '+1-800-555-0199') contactParts.push(`📞 ${phone}`);
-    if (website && website !== 'www.brand.com' && website !== 'Not Applicable') contactParts.push(`🌐 ${website}`);
-    if (email) contactParts.push(`✉️ ${email}`);
+    if (phone && phone !== '+1-800-555-0199') contactParts.push(stripEmoji(phone));
+    if (website && website !== 'www.brand.com' && website !== 'Not Applicable') contactParts.push(stripEmoji(website));
+    if (email) contactParts.push(stripEmoji(email));
 
     if (contactParts.length === 0) {
-      contactParts.push(`✨ ${data.businessName}`);
-      if (data.niche) contactParts.push(`🏷️ ${data.niche}`);
+      contactParts.push(stripEmoji(data.businessName));
+      if (data.niche) contactParts.push(stripEmoji(data.niche));
     }
 
     const contactText = contactParts.join('   |   ');
@@ -442,7 +520,7 @@ export class GraphicGeneratorService {
     ctx.strokeRect(40, contactBarY, width - 80, contactBarH);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 18px sans-serif';
+    ctx.font = font('bold 18px');
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(contactText, width / 2, contactBarY + contactBarH / 2);
