@@ -5,9 +5,11 @@ import { api } from '../services/api';
 interface ConnectMetaProps {
   businessId: string;
   addToast: (title: string, message: string, type: 'success' | 'alert' | 'info') => void;
+  /** Navigates to another page once channel mapping is saved. */
+  onNavigate?: (page: string) => void;
 }
 
-export default function ConnectMeta({ businessId, addToast }: ConnectMetaProps) {
+export default function ConnectMeta({ businessId, addToast, onNavigate }: ConnectMetaProps) {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<any>({ connected: false });
   
@@ -116,8 +118,14 @@ export default function ConnectMeta({ businessId, addToast }: ConnectMetaProps) 
         instagramAccountName: igName
       });
 
-      addToast('Configuration Saved', 'Campaign publication channels mapped successfully.', 'success');
+      addToast('Configuration Saved', 'Opening your content calendar…', 'success');
       loadStatus();
+
+      // Channel mapping is the last setup step — take the user straight to the
+      // content calendar, which is what they came here to unlock.
+      if (onNavigate) {
+        onNavigate('calendar');
+      }
     } catch (e: any) {
       addToast('Configuration error', e.message, 'alert');
     } finally {
@@ -229,7 +237,7 @@ export default function ConnectMeta({ businessId, addToast }: ConnectMetaProps) 
                   <LogOut size={16} /> Disconnect Account
                 </button>
                 <button className="btn-primary" onClick={handleSaveSelections} disabled={saving}>
-                  {saving ? <RefreshCw className="animate-spin" size={16} /> : <Check size={16} />} Save Channels Mapping
+                  {saving ? <RefreshCw className="animate-spin" size={16} /> : <Check size={16} />} Save
                 </button>
               </div>
 

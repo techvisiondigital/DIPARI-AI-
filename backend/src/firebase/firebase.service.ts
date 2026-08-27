@@ -309,11 +309,17 @@ export class FirebaseService implements OnModuleInit {
         const bucket = admin.storage().bucket(storageBucket);
         const file = bucket.file(destinationPath);
 
+        // This token is what makes the `?alt=media&token=…` download URL readable
+        // without any ACL change.  It MUST be echoed back in the URL below —
+        // omitting it returns 403 on buckets with uniform bucket-level access,
+        // which is the default for new Firebase projects.
+        const downloadToken = destinationPath.replace(/[^a-zA-Z0-9]/g, '-');
+
         await file.save(buffer, {
           metadata: {
             contentType,
             metadata: {
-              firebaseStorageDownloadTokens: destinationPath.replace(/[^a-zA-Z0-9]/g, '-'),
+              firebaseStorageDownloadTokens: downloadToken,
             },
           },
           resumable: false,
@@ -327,7 +333,7 @@ export class FirebaseService implements OnModuleInit {
         }
 
         const encodedPath = encodeURIComponent(destinationPath);
-        const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${storageBucket}/o/${encodedPath}?alt=media`;
+        const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${storageBucket}/o/${encodedPath}?alt=media&token=${downloadToken}`;
 
         this.logger.log(`[FirebaseService] File successfully uploaded to Firebase Storage: ${publicUrl}`);
         return { publicUrl, storagePath: destinationPath };

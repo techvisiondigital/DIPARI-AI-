@@ -79,7 +79,14 @@ export class AiService {
 
   private readonly apiKey: string;
   private readonly defaultModel: string;
-  private readonly fallbackModel = 'openrouter/auto';
+  /**
+   * Must be a genuinely zero-cost model. `openrouter/auto` routes to PAID
+   * models, so on an account with no credits both the primary and the fallback
+   * returned HTTP 402 and every caption silently degraded to a hardcoded
+   * template.  Both slugs below were verified live as zero-cost.
+   */
+  private readonly fallbackModel = process.env.OPENROUTER_FALLBACK_MODEL
+    || 'nvidia/nemotron-3-ultra-550b-a55b:free';
   private readonly baseUrl = 'https://openrouter.ai/api/v1/chat/completions';
   private readonly timeoutMs = 30_000;
 
@@ -89,11 +96,30 @@ export class AiService {
 
   private readonly hfApiKey: string;
   private readonly hfImageModel = 'black-forest-labs/FLUX.1-schnell';
-  private readonly hfBaseUrl = 'https://api-inference.huggingface.co/models';
+  /**
+   * Hugging Face retired `api-inference.huggingface.co` (the host no longer
+   * resolves) and moved serverless inference to the Inference Providers router.
+   * FLUX.1-schnell is no longer served by the `hf-inference` provider either —
+   * it returns 410 "model is deprecated" — so we route through fal-ai, which is
+   * listed as a live provider for this model.
+   */
+  private readonly hfBaseUrl = 'https://router.huggingface.co';
+  private readonly hfImageRoute = 'fal-ai/fal-ai/flux/schnell';
 
   constructor() {
     this.apiKey = process.env.OPENROUTER_API_KEY || '';
-    this.defaultModel = process.env.OPENROUTER_MODEL || 'google/gemma-4-31b-it:free';
+    // `openrouter/auto` is explicitly rejected here: it is a paid router, and
+    // leaving it configured is what silently disabled all AI text generation.
+    const configuredModel = (process.env.OPENROUTER_MODEL || '').trim();
+    if (configuredModel === 'openrouter/auto') {
+      this.logger.warn(
+        'OPENROUTER_MODEL is set to "openrouter/auto", which routes to paid models and fails with HTTP 402 on accounts without credits. Using a free model instead.',
+      );
+    }
+    this.defaultModel =
+      configuredModel && configuredModel !== 'openrouter/auto'
+        ? configuredModel
+        : 'minimax/minimax-m3:free';
     this.groqApiKey = process.env.GROQ_API_KEY || '';
     this.groqModel = process.env.GROQ_MODEL || 'llama-3.3-70b-specdec';
     this.hfApiKey = process.env.HF_API_KEY || '';
@@ -619,40 +645,44 @@ ${promptDetails?.topic ? `Specific Post Topic: ${promptDetails.topic}` : ''}`;
     // ── Tier 1: Hugging Face FLUX.1-schnell ─────────────────────────────────
     if (this.hfApiKey) {
       try {
-        this.logger.log(`[AIService] Attempting HF FLUX.1-schnell image generation...`);
+        this.logger.log(`[AIService] Attempting HF FLUX.1-schnell image generation via fal-ai router...`);
         const hfResponse = await axios.post(
-          `${this.hfBaseUrl}/${this.hfImageModel}`,
+          `${this.hfBaseUrl}/${this.hfImageRoute}`,
           {
-            inputs: cleanPrompt,
-            parameters: {
-              width,
-              height,
-              num_inference_steps: 4,
-              guidance_scale: 0.0,
-            },
+            prompt: cleanPrompt,
+            image_size: { width, height },
+            num_inference_steps: 4,
           },
           {
             headers: {
               Authorization: `Bearer ${this.hfApiKey}`,
               'Content-Type': 'application/json',
-              Accept: 'image/png',
             },
-            responseType: 'arraybuffer',
-            timeout: 60_000,
+            timeout: 90_000,
           },
         );
 
-        if (hfResponse.status === 200 && hfResponse.data) {
-          const base64 = Buffer.from(hfResponse.data).toString('base64');
-          const imageUrl = `data:image/png;base64,${base64}`;
+        // The router returns JSON ({ images: [{ url }] }), not raw image bytes.
+        const generatedUrl = hfResponse.data?.images?.[0]?.url;
+        if (hfResponse.status === 200 && generatedUrl) {
           const durationMs = Date.now() - startedAt;
-          this.logger.log(`[AIService] HF FLUX.1-schnell succeeded in ${durationMs}ms`);
-          return { success: true, imageUrl, model: 'hf-flux-schnell' };
+          this.logger.log(`[AIService] HF FLUX.1-schnell succeeded in ${durationMs}ms: ${generatedUrl}`);
+          return { success: true, imageUrl: generatedUrl, model: 'hf-flux-schnell' };
         }
+
+        this.logger.warn(
+          `[AIService] HF returned no image URL (status=${hfResponse.status}). Falling back to Pollinations...`,
+        );
       } catch (hfErr: any) {
         const status = hfErr?.response?.status;
-        const msg = hfErr?.response?.data ? Buffer.from(hfErr.response.data).toString('utf8') : hfErr.message;
-        this.logger.warn(`[AIService] HF image generation failed (status=${status}): ${msg?.substring(0, 120)}. Falling back to Pollinations...`);
+        const raw = hfErr?.response?.data;
+        const msg =
+          typeof raw === 'string' ? raw : raw ? JSON.stringify(raw) : hfErr.message;
+        // 402 means the account's monthly Inference Providers credits are spent.
+        const hint = status === 402 ? ' (Hugging Face inference credits exhausted)' : '';
+        this.logger.warn(
+          `[AIService] HF image generation failed (status=${status})${hint}: ${String(msg).substring(0, 160)}. Falling back to Pollinations...`,
+        );
       }
     } else {
       this.logger.warn('[AIService] HF_API_KEY not set — skipping HF image generation. Add HF_API_KEY to .env for better image quality.');

@@ -106,6 +106,60 @@ export async function uploadAdImageToMeta(
 }
 
 /**
+ * Meta rejects an ad set whose `flexible_spec.interests[].id` is not a real
+ * targeting ID.  Interest *names* (typed by a user, or produced by the AI
+ * strategist) must first be resolved through the Targeting Search API — this
+ * code previously synthesised IDs like `interest_0_Fashion`, which Meta always
+ * rejects with "Invalid parameter".  Anything that cannot be resolved is
+ * dropped rather than sent as a fabricated ID.
+ */
+export async function resolveAdInterestIds(
+  interestNames: string[],
+  accessToken: string,
+): Promise<{ id: string; name: string }[]> {
+  const resolved: { id: string; name: string }[] = [];
+
+  for (const rawName of interestNames) {
+    const name = String(rawName || '').trim();
+    if (!name) continue;
+
+    try {
+      const res = await axios.get('https://graph.facebook.com/v19.0/search', {
+        params: { type: 'adinterest', q: name, limit: 1, access_token: accessToken },
+        timeout: 15_000,
+      });
+      const match = res.data?.data?.[0];
+      if (match?.id) {
+        resolved.push({ id: String(match.id), name: match.name || name });
+      }
+    } catch {
+      // One unresolvable interest must not abort the whole campaign launch.
+    }
+  }
+
+  return resolved;
+}
+
+/**
+ * Surfaces the real Graph API error text. Without this, an axios failure
+ * reports only "Request failed with status code 400", which tells the user
+ * nothing about what Meta actually rejected.
+ */
+export function describeMetaError(err: any): string {
+  const apiError = err?.response?.data?.error;
+  if (apiError) {
+    const detail = [apiError.error_user_msg, apiError.message]
+      .filter(Boolean)
+      .filter((value, index, arr) => arr.indexOf(value) === index)
+      .join(' — ');
+    if (detail) {
+      return apiError.code ? `${detail} (Meta error code ${apiError.code})` : detail;
+    }
+  }
+  return err?.message || 'Unknown Meta API error';
+}
+
+/**
  * Executes full 4-Step Meta Campaign Hierarchy Creation:
  * Step A (Campaign) -> Step B (Ad Set) -> Step C (Image Hash & Ad Creative) -> Step D (Ad)
  */
@@ -183,14 +237,11 @@ export async function launchFullMetaCampaignHierarchy(
   }
 
   if (interestList.length > 0) {
-    targetingSpecObj.flexible_spec = [
-      {
-        interests: interestList.map((item, idx) => ({
-          id: `interest_${idx}_${item.replace(/\s+/g, '_')}`,
-          name: item,
-        })),
-      },
-    ];
+    // Resolve names to genuine Meta targeting IDs — fabricated IDs are rejected.
+    const resolvedInterests = await resolveAdInterestIds(interestList, accessToken);
+    if (resolvedInterests.length > 0) {
+      targetingSpecObj.flexible_spec = [{ interests: resolvedInterests }];
+    }
   }
 
   const adSetPayload: any = {

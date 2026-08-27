@@ -107,6 +107,12 @@ export const api = {
       const userCred = await signInWithEmailAndPassword(auth, email, password!);
       const user = userCred.user;
 
+      // Block entry until the emailed verification link has been opened.
+      // AuthScreens catches this exact message and switches to the verify view.
+      if (!user.emailVerified) {
+        throw new Error('Please verify your email before continuing.');
+      }
+
       const token = await user.getIdToken();
       const res = await fetch(`${BASE_URL}/auth/sync`, {
         method: 'POST',

@@ -1,4 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+
+/**
+ * Firestore hands `scheduledTime` back in several shapes depending on whether
+ * it came from the Admin SDK, a REST response, or the scheduler collection.
+ */
+function parseEntryDate(entry: any): Date | null {
+  const raw = entry?.scheduledTime;
+  if (!raw) return null;
+
+  let date: Date;
+  if (typeof raw?.toDate === 'function') date = raw.toDate();
+  else if (typeof raw?._seconds === 'number') date = new Date(raw._seconds * 1000);
+  else if (typeof raw?.seconds === 'number') date = new Date(raw.seconds * 1000);
+  else date = new Date(raw);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 import { 
   Calendar as CalendarIcon, 
   Trash2, 
@@ -16,7 +33,10 @@ import {
   Copy,
   Edit3,
   CheckCircle,
-  Clock
+  Clock,
+  FileSpreadsheet,
+  FileDown,
+  AlertCircle
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -131,6 +151,39 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
         }
         return updated;
       });
+    }
+  }, [calendarEntries]);
+
+  // A generated plan starts from the upcoming week, so its posts can land in
+  // next month.  When the month on screen holds nothing, jump to the month that
+  // actually contains the plan — otherwise the user sees an empty grid and
+  // assumes nothing was generated.
+  const didAutoJumpMonth = useRef(false);
+  useEffect(() => {
+    if (didAutoJumpMonth.current || calendarEntries.length === 0) return;
+
+    const dates = calendarEntries
+      .map(parseEntryDate)
+      .filter((d): d is Date => d !== null);
+    if (dates.length === 0) return;
+
+    const hasEntriesInView = dates.some(
+      (d) => d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear(),
+    );
+    if (hasEntriesInView) {
+      didAutoJumpMonth.current = true;
+      return;
+    }
+
+    const now = Date.now();
+    const upcoming = dates
+      .filter((d) => d.getTime() >= now)
+      .sort((a, b) => a.getTime() - b.getTime());
+    const target = upcoming[0] || [...dates].sort((a, b) => b.getTime() - a.getTime())[0];
+
+    if (target) {
+      setCurrentDate(new Date(target.getFullYear(), target.getMonth(), 1));
+      didAutoJumpMonth.current = true;
     }
   }, [calendarEntries]);
 
@@ -362,6 +415,14 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
       if (res.success) {
         const newCount = regenCount + 1;
         setRegenerateCounts(prev => ({ ...prev, [id]: newCount }));
+        // Clear the failed-image flag so the freshly generated image is shown
+        // instead of staying stuck on the retry placeholder.
+        setBrokenImageIds(prev => {
+          if (!prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
         onToast('Regeneration Complete', `New content and image generated. (${newCount}/2 uses)`, 'success');
         await fetchCalendar();
       } else {
@@ -557,8 +618,7 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
 
   // Kept for backwards compatibility with existing bookmarks; the toolbar now
   // exposes schedule settings instead of spreadsheet exports.
-  void handleExportCSV;
-  void handleExportExcel;
+  // (both export handlers are wired to toolbar buttons above)
 
   const handleExportPDF = () => {
     window.print();
@@ -594,7 +654,10 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
   const monthYearString = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
 
   const dataRowsCount = filteredEntries.length;
-  const paddingRowsNeeded = Math.max(12 - dataRowsCount, 0);
+  // Keep a couple of blank rows for the spreadsheet feel, but don't pad a
+  // 3-post week out to 12 rows — nine empty rows read as "generation failed".
+  // With no rows at all, the empty state below replaces the padding entirely.
+  const paddingRowsNeeded = dataRowsCount === 0 ? 0 : Math.min(2, Math.max(0, 8 - dataRowsCount));
   const paddingRowsArray = Array.from({ length: paddingRowsNeeded });
 
   // Explicit CSS rules for spreadsheet appearance
@@ -691,6 +754,20 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
             style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 14px', background: '#eef2ff', border: '1px solid #a5b4fc', color: '#3730a3', borderRadius: '10px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}
           >
             <Clock className="w-3.5 h-3.5" /> Schedule
+          </button>
+          <button
+            onClick={handleExportCSV}
+            title="Download the visible rows as a CSV file"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 14px', background: '#ffffff', border: '1px solid #cbd5e1', color: '#334155', borderRadius: '10px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}
+          >
+            <FileDown className="w-3.5 h-3.5" /> CSV
+          </button>
+          <button
+            onClick={handleExportExcel}
+            title="Download the visible rows as an Excel file"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 14px', background: '#ffffff', border: '1px solid #cbd5e1', color: '#334155', borderRadius: '10px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
           </button>
           <button
             onClick={handleExportPDF}
@@ -835,13 +912,46 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
                       {entry.imageUrl && !brokenImageIds.has(entry.id) ? (
                         <img
                           src={entry.imageUrl}
-                          alt="Post visual"
-                          style={{ width: '70px', height: '70px', objectFit: 'cover', borderRadius: '6px', display: 'block', margin: '0 auto', border: '1px solid #e2e8f0' }}
+                          alt={entry.headline ? `Visual for ${entry.headline}` : 'Post visual'}
+                          loading="lazy"
+                          title="Click to open the post preview"
+                          onClick={() => setPreviewEntry(entry)}
+                          style={{
+                            width: '76px', height: '76px', objectFit: 'cover', borderRadius: '8px',
+                            display: 'block', margin: '0 auto', border: '1px solid #e2e8f0',
+                            cursor: 'pointer', background: '#f1f5f9',
+                          }}
                           onError={() => setBrokenImageIds(previous => new Set(previous).add(entry.id))}
                         />
+                      ) : brokenImageIds.has(entry.id) ? (
+                        // Distinct from "not generated yet" — the image exists but
+                        // could not be loaded, so offer a retry rather than a
+                        // placeholder that looks like an empty slot.
+                        <button
+                          onClick={() => handleRegenerateRow(entry.id)}
+                          title="Image failed to load — click to regenerate"
+                          style={{
+                            width: '76px', height: '76px', borderRadius: '8px', margin: '0 auto',
+                            background: '#fffbeb', border: '1px dashed #fcd34d', color: '#b45309',
+                            display: 'flex', flexDirection: 'column', alignItems: 'center',
+                            justifyContent: 'center', gap: '3px', cursor: 'pointer', padding: 0,
+                          }}
+                        >
+                          <AlertCircle size={18} />
+                          <span style={{ fontSize: '9px', fontWeight: 700, lineHeight: 1 }}>Retry</span>
+                        </button>
                       ) : (
-                        <div style={{ width: '70px', height: '70px', background: '#e0e7ff', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
-                          <ImageIcon size={22} color="#6366f1" />
+                        <div
+                          title="No image generated yet"
+                          style={{
+                            width: '76px', height: '76px', background: '#f8fafc',
+                            border: '1px dashed #cbd5e1', borderRadius: '8px', display: 'flex',
+                            flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                            gap: '3px', margin: '0 auto', color: '#94a3b8',
+                          }}
+                        >
+                          <ImageIcon size={18} />
+                          <span style={{ fontSize: '9px', fontWeight: 600, lineHeight: 1 }}>No image</span>
                         </div>
                       )}
                     </td>
@@ -870,17 +980,30 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
                       onClick={() => handleCellClick(entry, 'C')}
                       style={cellStyle(selectedCell?.rowId === entry.id && selectedCell?.colName === 'C', 'left', 'bottom')}
                     >
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        fontWeight: 600,
-                        background: lowercaseStatus === 'posted' ? '#dcfce7' : lowercaseStatus === 'scheduled' ? '#dbeafe' : '#f1f5f9',
-                        color: lowercaseStatus === 'posted' ? '#16a34a' : lowercaseStatus === 'scheduled' ? '#2563eb' : '#64748b'
-                      }}>
-                        {lowercaseStatus}
-                      </span>
+                      {(() => {
+                        const palette: Record<string, { bg: string; fg: string; dot: string; label: string }> = {
+                          posted:    { bg: '#dcfce7', fg: '#15803d', dot: '#22c55e', label: 'Posted' },
+                          scheduled: { bg: '#dbeafe', fg: '#1d4ed8', dot: '#3b82f6', label: 'Scheduled' },
+                          pending:   { bg: '#fef3c7', fg: '#b45309', dot: '#f59e0b', label: 'Pending' },
+                          failed:    { bg: '#fee2e2', fg: '#b91c1c', dot: '#ef4444', label: 'Failed' },
+                          draft:     { bg: '#f1f5f9', fg: '#475569', dot: '#94a3b8', label: 'Draft' },
+                        };
+                        const tone = palette[lowercaseStatus] || {
+                          bg: '#f1f5f9', fg: '#475569', dot: '#94a3b8',
+                          label: lowercaseStatus ? lowercaseStatus.charAt(0).toUpperCase() + lowercaseStatus.slice(1) : 'Draft',
+                        };
+                        return (
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '5px',
+                            padding: '3px 9px', borderRadius: '999px',
+                            fontSize: '11px', fontWeight: 700, letterSpacing: '0.01em',
+                            background: tone.bg, color: tone.fg, whiteSpace: 'nowrap',
+                          }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: tone.dot, flexShrink: 0 }} />
+                            {tone.label}
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     {/* Actions Column (Column G) — Status-aware actions */}
@@ -990,6 +1113,31 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
               })}
 
               {/* Spreadsheet Empty Rows padding */}
+              {dataRowsCount === 0 && (
+                <tr>
+                  <td colSpan={6} style={{ padding: '48px 24px', textAlign: 'center', background: '#ffffff', borderBottom: '1px solid #cbd5e1' }}>
+                    <CalendarIcon size={30} style={{ color: '#cbd5e1', marginBottom: '12px' }} />
+                    <div style={{ fontWeight: 700, color: '#334155', fontSize: '0.95rem', marginBottom: '6px' }}>
+                      No posts scheduled for {monthYearString}
+                    </div>
+                    <p style={{ margin: '0 auto 18px', color: '#64748b', fontSize: '0.82rem', maxWidth: '400px', lineHeight: 1.6 }}>
+                      {calendarEntries.length > 0
+                        ? 'Your content plan is scheduled in another month — use the arrows above to browse to it, or add a row here.'
+                        : searchTerm || statusFilter !== 'ALL'
+                          ? 'No posts match your current search or status filter.'
+                          : 'Your weekly content plan will appear here once it has been generated.'}
+                    </p>
+                    <button
+                      onClick={() => setIsAddModalOpen(true)}
+                      className="btn-primary"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '9px 18px', borderRadius: '10px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}
+                    >
+                      <Plus className="w-4 h-4" /> Add Row
+                    </button>
+                  </td>
+                </tr>
+              )}
+
               {paddingRowsArray.map((_, idx) => {
                 const rowNum = dataRowsCount + idx + 2;
                 return (

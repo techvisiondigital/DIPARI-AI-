@@ -75,6 +75,9 @@ export class MetaController {
       const result = await this.integrationsService.connectMeta(body.code, body.businessId, body.redirectUri);
       return result;
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error.message || 'Failed to connect Meta', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -87,6 +90,9 @@ export class MetaController {
     try {
       return await this.integrationsService.getMetaStatus(businessId);
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error?.message || 'Unknown error', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -97,6 +103,9 @@ export class MetaController {
     try {
       return await this.integrationsService.getMetaChannels(businessId);
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error?.message || 'Failed to fetch channels', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -107,6 +116,9 @@ export class MetaController {
     try {
       return await this.integrationsService.getMetaPages(businessId);
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error?.message || 'Unknown error', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -117,6 +129,9 @@ export class MetaController {
     try {
       return await this.integrationsService.getMetaAdAccounts(businessId);
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error?.message || 'Unknown error', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -127,6 +142,9 @@ export class MetaController {
     try {
       return await this.integrationsService.getMetaInstagramAccounts(businessId, pageId);
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error?.message || 'Unknown error', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -147,6 +165,9 @@ export class MetaController {
     try {
       return await this.integrationsService.selectMetaAccounts(body.businessId, body);
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error?.message || 'Unknown error', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -157,6 +178,9 @@ export class MetaController {
     try {
       return await this.integrationsService.disconnectMeta(businessId);
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error?.message || 'Unknown error', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -169,6 +193,9 @@ export class MetaController {
     try {
       return await this.integrationsService.getMetaBusinessManagers(businessId);
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error?.message || 'Unknown error', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -185,6 +212,9 @@ export class MetaController {
     try {
       return await this.integrationsService.createLeadForm(body.businessId, body.formName, body.questions);
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error?.message || 'Unknown error', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -195,6 +225,9 @@ export class MetaController {
     try {
       return await this.integrationsService.listLeadForms(businessId);
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error?.message || 'Unknown error', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -205,6 +238,9 @@ export class MetaController {
     try {
       return await this.integrationsService.getMetaLeads(businessId);
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error?.message || 'Unknown error', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -221,6 +257,9 @@ export class MetaController {
     try {
       return await this.integrationsService.getMetaAnalytics(businessId, campaignId, datePreset);
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error?.message || 'Unknown error', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -235,6 +274,9 @@ export class MetaController {
     try {
       return await this.integrationsService.getDetailedAnalytics(businessId, datePreset);
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error?.message || 'Unknown error', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -245,6 +287,9 @@ export class MetaController {
     try {
       return await this.integrationsService.getMetaCampaigns(businessId);
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error?.message || 'Unknown error', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -285,6 +330,9 @@ export class MetaController {
     try {
       return await this.integrationsService.launchMetaAdCampaign(body.businessId, body);
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error?.message || 'Failed to launch Meta campaign', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -305,6 +353,9 @@ export class ApiMetaController {
     try {
       return await this.integrationsService.launchMetaAdCampaign(body.businessId, body);
     } catch (error: any) {
+      // Preserve the specific status and message the service already chose
+      // (e.g. the real Meta rejection reason) instead of flattening to a 500.
+      if (error instanceof HttpException) throw error;
       throw new HttpException(error?.message || 'Failed to launch Meta campaign', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }

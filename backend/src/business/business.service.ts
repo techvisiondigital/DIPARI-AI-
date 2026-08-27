@@ -704,6 +704,34 @@ export class BusinessService {
     return profile;
   }
 
+  /**
+   * Coerces any date shape Firestore can hand back — Timestamp, Date, ISO
+   * string, epoch number — into an ISO string.  Firestore returns Timestamp
+   * objects for fields written as `new Date()`, and `new Date(timestamp)`
+   * yields an Invalid Date whose `.toISOString()` throws RangeError.  That
+   * unhandled throw is what surfaced in the UI as "Internal server error".
+   */
+  private toIsoString(value: any, fallback: Date = new Date()): string {
+    if (!value) return fallback.toISOString();
+
+    let candidate: Date;
+    if (value instanceof Date) {
+      candidate = value;
+    } else if (typeof value?.toDate === 'function') {
+      // Firestore Timestamp
+      candidate = value.toDate();
+    } else if (typeof value?._seconds === 'number') {
+      // Plain-object Timestamp (survives JSON serialization)
+      candidate = new Date(value._seconds * 1000);
+    } else if (typeof value?.seconds === 'number') {
+      candidate = new Date(value.seconds * 1000);
+    } else {
+      candidate = new Date(value);
+    }
+
+    return Number.isNaN(candidate.getTime()) ? fallback.toISOString() : candidate.toISOString();
+  }
+
   async getProfileDetails(businessId: string) {
     const businessDoc = await this.firebase.col('businesses').doc(businessId).get();
     const business = businessDoc.exists ? { id: businessDoc.id, ...businessDoc.data() } : null;
@@ -749,11 +777,12 @@ export class BusinessService {
     const rawStart = activeSub.startDate || activeSub.createdAt || new Date();
     const rawBilling = activeSub.nextBillingDate || rawExpiry;
 
+    const oneYearOut = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
     const normalizedSub = {
       ...activeSub,
-      startDate: rawStart instanceof Date ? rawStart.toISOString() : new Date(rawStart).toISOString(),
-      expiryDate: rawExpiry instanceof Date ? rawExpiry.toISOString() : new Date(rawExpiry).toISOString(),
-      nextBillingDate: rawBilling instanceof Date ? rawBilling.toISOString() : new Date(rawBilling).toISOString(),
+      startDate: this.toIsoString(rawStart),
+      expiryDate: this.toIsoString(rawExpiry, oneYearOut),
+      nextBillingDate: this.toIsoString(rawBilling, oneYearOut),
       autoRenew: activeSub.autoRenew !== false,
     };
 
@@ -775,7 +804,7 @@ export class BusinessService {
       }
 
       const invoiceId = p.invoiceId || (p.paymentRequestId ? `INV-${p.paymentRequestId.slice(-8).toUpperCase()}` : `INV-2026-${String(idx + 1).padStart(4, '0')}`);
-      const paymentDate = p.paymentDate || p.paidAt || p.createdAt || new Date().toISOString();
+      const paymentDate = this.toIsoString(p.paymentDate || p.paidAt || p.createdAt);
       const paymentMethod = p.provider || p.paymentMethod || 'PhonePe';
       const currency = p.currency || 'INR';
 

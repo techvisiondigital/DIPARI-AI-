@@ -10,6 +10,22 @@ import { AiService } from '../ai/ai.service';
 import { BusinessIntelligenceService } from '../business/business-intelligence.service';
 import { PromptBuilderService } from '../prompt-builder/prompt-builder.service';
 import { IntegrationsService } from '../integrations/integrations.service';
+import { getPlanLimits } from '../payment/payment.constants';
+
+/**
+ * Which weekdays a plan posts on, keyed by the plan's postsPerWeek allowance.
+ * Three posts a week deliberately means Tuesday / Thursday / Saturday so the
+ * gaps between posts stay even across the week.
+ */
+const POSTING_DAY_PATTERNS: Record<number, string[]> = {
+  1: ['Wednesday'],
+  2: ['Tuesday', 'Thursday'],
+  3: ['Tuesday', 'Thursday', 'Saturday'],
+  4: ['Monday', 'Tuesday', 'Thursday', 'Saturday'],
+  5: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+  6: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+  7: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+};
 
 export interface ContentStrategyData {
   monthlyMarketingStrategy: string;
@@ -75,10 +91,15 @@ export class ContentService {
     const startedAt = Date.now();
     this.logger.log(`[ContentService] Initiating Image Generation & Compositing for business: ${businessId}`);
 
+    // Kept outside the try so the failure path can still fall back to a
+    // brand-relevant prompt instead of a generic one.
+    let brandPrompt = '';
+
     try {
       // 1. Build structured image prompt from BusinessIntelligenceService single source of truth
       const promptData = await this.promptBuilder.buildStructuredImagePrompt(businessId, postDetails);
       const ctx = promptData.ctx;
+      brandPrompt = promptData.prompt;
 
       // 2. Determine aspect ratio from post type if not explicit
       let aspectRatio: '1:1' | '4:5' | '9:16' = postDetails.aspectRatio || '1:1';
@@ -134,8 +155,25 @@ export class ContentService {
       return finalUrl;
     } catch (err: any) {
       this.logger.error(`[ContentService] Image generation & compositing error for ${businessId}: ${err.message}`);
-      // Fallback: return a curated structured graphic URL
-      return `https://image.pollinations.ai/prompt/${encodeURIComponent(`Commercial ad creative background for business ${businessId}`)}?width=1080&height=1080&nologo=true&model=flux`;
+
+      // Fall back to a still brand-relevant image.  Previously this prompt was
+      // built from the raw businessId ("...for business abc123"), which carries
+      // no product or brand signal at all and is why unrelated stock-style
+      // images appeared whenever compositing failed.
+      if (!brandPrompt) {
+        try {
+          const recovery = await this.promptBuilder.buildStructuredImagePrompt(businessId, postDetails);
+          brandPrompt = recovery.prompt;
+        } catch {
+          const ctx = await this.businessIntelligence.getBusinessContext(businessId).catch(() => null);
+          brandPrompt = ctx
+            ? `Professional commercial advertising photograph for ${ctx.businessName}, showing ${ctx.productsServices || ctx.businessCategory} as the main subject, ${ctx.brandTone || 'clean modern'} style, no text, no watermark`
+            : 'Professional commercial advertising photograph, clean modern product presentation, no text, no watermark';
+        }
+      }
+
+      const encoded = encodeURIComponent(brandPrompt.substring(0, 900));
+      return `https://image.pollinations.ai/prompt/${encoded}?width=1080&height=1080&nologo=true&model=flux&seed=${Date.now()}`;
     }
   }
 
@@ -553,11 +591,36 @@ export class ContentService {
       };
     }
 
+    const selectedDays = await this.getPlanPostingDays(businessId);
+
     const result = await this.generateMonthlyCalendar(businessId, {
-      selectedDays: ['Monday', 'Wednesday', 'Friday'],
+      selectedDays,
       durationWeeks: 1,
     });
-    return { ...result, created: true };
+    return { ...result, created: true, selectedDays };
+  }
+
+  /**
+   * Resolves the weekdays this business should post on from its active
+   * subscription.  FREE / STARTER / ADVANCE allow 3 posts a week
+   * (Tuesday, Thursday, Saturday), PREMIUM allows 5, demo plans allow 7.
+   */
+  async getPlanPostingDays(businessId: string): Promise<string[]> {
+    let postsPerWeek = 3;
+
+    try {
+      const subscriptions = await this.firebase.getSubscriptionsByBusinessId(businessId);
+      const activeSub =
+        (subscriptions || []).find((s: any) => s.status === 'ACTIVE') || (subscriptions || [])[0];
+      postsPerWeek = getPlanLimits(activeSub?.plan).postsPerWeek;
+    } catch (err: any) {
+      this.logger.warn(
+        `Could not resolve plan for business ${businessId} (${err.message}). Defaulting to 3 posts/week.`,
+      );
+    }
+
+    const clamped = Math.min(7, Math.max(1, Number(postsPerWeek) || 3));
+    return POSTING_DAY_PATTERNS[clamped] || POSTING_DAY_PATTERNS[3];
   }
 
   /** Alias method for backward compatibility */

@@ -3,7 +3,7 @@ import * as dotenv from 'dotenv';
 import axios from 'axios';
 import { FirebaseService } from '../firebase/firebase.service';
 import { AiService } from '../ai/ai.service';
-import { launchFullMetaCampaignHierarchy } from '../lib/meta/ads-manager';
+import { launchFullMetaCampaignHierarchy, describeMetaError } from '../lib/meta/ads-manager';
 
 dotenv.config();
 
@@ -1139,12 +1139,17 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
         if (businessId) {
           business = await this.firebase.getBusinessById(businessId);
         }
-        const accessToken = business?.metaAccessToken || process.env.META_ACCESS_TOKEN;
-        const adAccountId = business?.selectedAdAccountId || business?.metaAdAccountId || process.env.META_AD_ACCOUNT_ID;
-        const pageId = business?.selectedPageId || business?.metaPageId || process.env.META_PAGE_ID || '100000000000000';
+        // Always use THIS business's own credentials. Falling back to the
+        // global env token silently ran one tenant's campaigns against another
+        // account's ad account, and that env token is long expired anyway.
+        const accessToken = business?.metaAccessToken;
+        const adAccountId = business?.selectedAdAccountId || business?.metaAdAccountId;
+        const pageId = business?.selectedPageId || business?.metaPageId;
 
-        if (!accessToken || !adAccountId) {
-          throw new Error('Meta Access Token or Ad Account ID not configured. Please connect Meta first.');
+        if (!accessToken || !adAccountId || !pageId) {
+          throw new Error(
+            'Meta is not connected for this business. Open Connect Meta, authorise your Facebook account, then select an Ad Account and Page.',
+          );
         }
 
         const metaObjective = this.mapMetaObjective(objective);
@@ -1282,7 +1287,16 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     const adAccountId = business?.selectedAdAccountId || business?.metaAdAccountId || 'act_mock_12345';
     const pageId = business?.selectedPageId || business?.metaPageId || 'mock_page_123';
 
-    const launchResult = await launchFullMetaCampaignHierarchy({
+    if (!business?.metaAccessToken) {
+      throw new HttpException(
+        'Meta account is not connected. Open Connect Meta and authorise your Facebook account before launching a campaign.',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    let launchResult: Awaited<ReturnType<typeof launchFullMetaCampaignHierarchy>>;
+    try {
+      launchResult = await launchFullMetaCampaignHierarchy({
       adAccountId,
       pageId,
       accessToken,
@@ -1297,7 +1311,14 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       imageUrl: campaignPayload.bannerUrl || campaignPayload.imageUrl || null,
       status: campaignPayload.status || 'PAUSED',
       isMock: this.isMock || !accessToken || accessToken.startsWith('mock_'),
-    });
+      });
+    } catch (err: any) {
+      // Report exactly what Meta rejected — "Request failed with status code 400"
+      // gives the user nothing to act on.
+      const detail = describeMetaError(err);
+      this.logger.error(`Meta campaign launch failed for business ${businessId}: ${detail}`);
+      throw new HttpException(`Meta rejected the campaign: ${detail}`, HttpStatus.BAD_GATEWAY);
+    }
 
     // Save created campaign hierarchy to Firestore
     const campaignDoc = await this.firebase.createCampaign({
@@ -1401,8 +1422,17 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     const business = await this.firebase.getBusinessById(businessId);
     if (!business) throw new HttpException('Business not found', HttpStatus.NOT_FOUND);
 
-    const metaAccessToken = business.metaAccessToken || process.env.META_ACCESS_TOKEN || process.env.META_SYSTEM_USER_TOKEN;
-    const adAccountId = business.selectedAdAccountId || business.metaAdAccountId || process.env.META_AD_ACCOUNT_ID || 'act_877321611329713';
+    // This business's own credentials only — never a shared env token or the
+    // hardcoded ad account that used to sit in this fallback chain.
+    const metaAccessToken = business.metaAccessToken;
+    const adAccountId = business.selectedAdAccountId || business.metaAdAccountId;
+
+    if (!this.isMock && (!metaAccessToken || !adAccountId)) {
+      throw new HttpException(
+        'Meta is not connected for this business. Connect Meta and select an Ad Account to view live analytics.',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
 
     if (this.isMock || !metaAccessToken) {
       const budgetVal = parseInt((business?.profile?.monthlyBudget || '40000').replace(/[^0-9]/g, '')) || 40000;
@@ -1571,8 +1601,9 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
       return allLeads;
     } catch (err: any) {
-      this.logger.error('Failed to fetch Meta leads', err.response?.data || err.message);
-      throw new HttpException('Failed to fetch leads from Meta API', HttpStatus.BAD_GATEWAY);
+      const detail = describeMetaError(err);
+      this.logger.error(`Failed to fetch Meta leads for business ${businessId}: ${detail}`);
+      throw new HttpException(`Could not fetch leads from Meta: ${detail}`, HttpStatus.BAD_GATEWAY);
     }
   }
 
@@ -1816,8 +1847,16 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       };
     }
 
-    const metaAccessToken = business.metaAccessToken || process.env.META_ACCESS_TOKEN || process.env.META_SYSTEM_USER_TOKEN;
-    const adAccountId = business.selectedAdAccountId || business.metaAdAccountId || process.env.META_AD_ACCOUNT_ID || 'act_877321611329713';
+    // This business's own credentials only — see note in getMetaAnalytics.
+    const metaAccessToken = business.metaAccessToken;
+    const adAccountId = business.selectedAdAccountId || business.metaAdAccountId;
+
+    if (!metaAccessToken || !adAccountId) {
+      throw new HttpException(
+        'Meta is not connected for this business. Connect Meta and select an Ad Account to view live campaigns.',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
 
     if (!metaAccessToken) {
       const budgetVal = parseInt((business?.profile?.monthlyBudget || '40000').replace(/[^0-9]/g, '')) || 40000;

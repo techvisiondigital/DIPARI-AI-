@@ -39,6 +39,7 @@ import {
 import { api } from './services/api';
 import { auth } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { friendlyError } from './utils/errorMessages';
 import { AuthScreens } from './components/AuthScreens';
 import { AdminPortal } from './components/AdminPortal';
 import CampaignGenerator from './components/CampaignGenerator';
@@ -286,6 +287,7 @@ export default function App() {
 
   // UI status helpers
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
+  const [alertModal, setAlertModal] = useState<{ title: string; message: string } | null>(null);
   const [isNotificationTrayOpen, setIsNotificationTrayOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -325,8 +327,12 @@ export default function App() {
           api.meta.connect(code, businessId)
             .then(async () => {
               const calendar = await api.content.ensureInitialWeek(businessId);
+              // Posting days come from the plan (3 posts/week = Tue, Thu, Sat).
+              const planDays: string[] = Array.isArray(calendar.selectedDays) ? calendar.selectedDays : [];
               const calendarMessage = calendar.created
-                ? 'Your first Monday, Wednesday, Friday content plan is ready.'
+                ? planDays.length
+                  ? `Your first ${planDays.join(', ')} content plan is ready.`
+                  : 'Your first weekly content plan is ready.'
                 : 'Your existing content calendar is ready.';
               addToast('Meta Connected', calendarMessage, 'success');
               window.history.replaceState({}, '', '/connect-meta');
@@ -405,6 +411,23 @@ export default function App() {
 
       unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
         if (firebaseUser) {
+          // Firebase signs a newly registered user in the instant the account is
+          // created, before they have opened the emailed verification link.
+          // Without this gate they were dropped straight into onboarding and
+          // never saw the "check your inbox" step.  Google accounts arrive
+          // pre-verified and pass straight through.
+          const usesPassword = firebaseUser.providerData.some(
+            (provider: any) => provider?.providerId === 'password',
+          );
+          if (usesPassword && !firebaseUser.emailVerified) {
+            localStorage.removeItem('campaignai_token');
+            setUser(null);
+            // Stay put if they are already on the auth screen — it is showing
+            // the "verify your email" step right now.
+            setCurrentPage((prev) => (prev === 'auth' || prev === 'landing' ? prev : 'auth'));
+            return;
+          }
+
           try {
             const token = await firebaseUser.getIdToken();
             localStorage.setItem('campaignai_token', token);
@@ -500,8 +523,15 @@ export default function App() {
     }
   };
 
-  // Toast dispatch
+  // Toast dispatch.
+  // Errors are shown as a centred modal the user must acknowledge — a corner
+  // toast that vanishes after 4s is too easy to miss for something that needs
+  // action.  Successes and info stay as toasts so they don't interrupt.
   const addToast = (title: string, message: string, type: 'success' | 'alert' | 'info') => {
+    if (type === 'alert') {
+      setAlertModal({ title, message: friendlyError(message, message) });
+      return;
+    }
     const id = Math.random().toString();
     setToasts((prev) => [...prev, { id, title, message, type }]);
     setTimeout(() => {
@@ -787,6 +817,55 @@ export default function App() {
           </div>
         ))}
       </div>
+
+      {/* --- ERROR MODAL --- */}
+      {alertModal && (
+        <div
+          onClick={() => setAlertModal(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 100000,
+            background: 'rgba(15, 23, 42, 0.55)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+          }}
+        >
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="alert-modal-title"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--color-bg-end, #ffffff)', color: 'var(--color-text, #0f172a)',
+              borderRadius: 16, padding: '28px 28px 22px', width: '100%', maxWidth: 420,
+              boxShadow: '0 24px 60px rgba(0,0,0,0.28)', border: '1px solid var(--color-border, #e2e8f0)',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{
+              width: 56, height: 56, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.12)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px',
+            }}>
+              <AlertTriangle size={28} style={{ color: 'var(--color-danger, #ef4444)' }} />
+            </div>
+            <h3 id="alert-modal-title" style={{ margin: '0 0 10px', fontSize: '1.15rem', fontWeight: 700 }}>
+              {alertModal.title}
+            </h3>
+            <p style={{ margin: '0 0 24px', fontSize: '0.92rem', lineHeight: 1.6, opacity: 0.85 }}>
+              {alertModal.message}
+            </p>
+            <button
+              autoFocus
+              onClick={() => setAlertModal(null)}
+              style={{
+                width: '100%', padding: '12px 20px', borderRadius: 10, border: 'none',
+                background: 'var(--color-primary, #6366f1)', color: '#fff',
+                fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* --- 1. LANDING PAGE --- */}
       {currentPage === 'landing' && (
@@ -1939,7 +2018,11 @@ export default function App() {
 
             {/* --- PAGE: CONNECT META --- */}
             {currentPage === 'connect-meta' && user?.businessId && (
-              <ConnectMeta businessId={user.businessId} addToast={addToast} />
+              <ConnectMeta
+                businessId={user.businessId}
+                addToast={addToast}
+                onNavigate={(page) => setCurrentPage(page as any)}
+              />
             )}
 
             {/* --- PAGE: SETTINGS --- */}

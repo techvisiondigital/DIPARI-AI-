@@ -15,6 +15,7 @@ import {
 import { api } from '../services/api';
 import { auth } from '../services/firebase';
 import { sendEmailVerification } from 'firebase/auth';
+import { friendlyError } from '../utils/errorMessages';
 
 interface AuthScreensProps {
   defaultView?: 'login' | 'register';
@@ -94,8 +95,9 @@ export function AuthScreens({ defaultView, onAuthSuccess, addToast, onBackToHome
       addToast('Registration Successful', 'Verification link sent to ' + email, 'success');
       setView('verify');
     } catch (err: any) {
-      setErrorMessage(err.message || 'Registration failed');
-      addToast('Registration Failed', err.message || 'Please try again', 'alert');
+      const message = friendlyError(err, 'Registration failed. Please try again.');
+      setErrorMessage(message);
+      addToast('Registration Failed', message, 'alert');
     } finally {
       setLoading(false);
     }
@@ -117,8 +119,9 @@ export function AuthScreens({ defaultView, onAuthSuccess, addToast, onBackToHome
       if (err.message === 'Please verify your email before continuing.') {
         setView('verify');
       } else {
-        setErrorMessage(err.message || 'Invalid credentials');
-        addToast('Login Failed', err.message || 'Please verify details', 'alert');
+        const message = friendlyError(err, 'Incorrect email or password. Please try again.');
+        setErrorMessage(message);
+        addToast('Login Failed', message, 'alert');
       }
     } finally {
       setLoading(false);
@@ -137,8 +140,9 @@ export function AuthScreens({ defaultView, onAuthSuccess, addToast, onBackToHome
       addToast('Google Sign-In Successful', `Welcome, ${res.user.name}!`, 'success');
       onAuthSuccess(res.user);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Google Auth failed');
-      addToast('Sign-In Failed', err.message || 'Authentication cancelled', 'alert');
+      const message = friendlyError(err, 'Google sign-in failed. Please try again.');
+      setErrorMessage(message);
+      addToast('Sign-In Failed', message, 'alert');
     } finally {
       setLoading(false);
     }
@@ -157,7 +161,7 @@ export function AuthScreens({ defaultView, onAuthSuccess, addToast, onBackToHome
       setSuccessMessage('If this email is registered, a password reset link has been dispatched.');
       addToast('Reset Sent', 'Reset details sent to ' + email, 'success');
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to request password reset link.');
+      setErrorMessage(friendlyError(err, 'Failed to request password reset link.'));
     } finally {
       setLoading(false);
     }
@@ -177,7 +181,7 @@ export function AuthScreens({ defaultView, onAuthSuccess, addToast, onBackToHome
         setErrorMessage('Session expired. Please sign in with your email/password, then check for a verification prompt.');
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to resend verification.');
+      setErrorMessage(friendlyError(err, 'Failed to resend verification email.'));
     } finally {
       setLoading(false);
     }
