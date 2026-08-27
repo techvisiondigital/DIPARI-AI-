@@ -115,6 +115,16 @@ export class AiService {
   private readonly togetherImageModel: string;
   private readonly togetherBaseUrl = 'https://api.together.ai/v1/images/generations';
 
+  /**
+   * Cloudflare Workers AI is the most generous genuinely-free image source:
+   * 10,000 neurons/day, and flux-1-schnell at 1024x1024 with 4 steps costs
+   * ~57.6 neurons — roughly 170 images a day. Compare Hugging Face's $0.10/mo
+   * (~30 images total). Tried first when configured.
+   */
+  private readonly cfAccountId: string;
+  private readonly cfApiToken: string;
+  private readonly cfImageModel: string;
+
   constructor() {
     this.apiKey = process.env.OPENROUTER_API_KEY || '';
     // `openrouter/auto` is explicitly rejected here: it is a paid router, and
@@ -141,6 +151,10 @@ export class AiService {
     this.togetherApiKey = process.env.TOGETHER_API_KEY || '';
     this.togetherImageModel =
       process.env.TOGETHER_IMAGE_MODEL?.trim() || 'black-forest-labs/FLUX.1-schnell';
+    this.cfAccountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || '';
+    this.cfApiToken = process.env.CLOUDFLARE_API_TOKEN?.trim() || '';
+    this.cfImageModel =
+      process.env.CLOUDFLARE_IMAGE_MODEL?.trim() || '@cf/black-forest-labs/flux-1-schnell';
 
     if (!this.apiKey && !this.groqApiKey) {
       this.logger.warn('Neither OPENROUTER_API_KEY nor GROQ_API_KEY is set. AI features will use fallback responses.');
@@ -660,7 +674,45 @@ ${promptDetails?.topic ? `Specific Post Topic: ${promptDetails.topic}` : ''}`;
       height = 1024;
     }
 
-    // ── Tier 0: Together AI FLUX.1-schnell (free tier) ──────────────────────
+    // ── Tier 0: Cloudflare Workers AI (free, ~170 images/day) ───────────────
+    if (this.cfAccountId && this.cfApiToken) {
+      try {
+        this.logger.log(`[AIService] Attempting Cloudflare Workers AI (${this.cfImageModel})...`);
+        const res = await axios.post(
+          `https://api.cloudflare.com/client/v4/accounts/${this.cfAccountId}/ai/run/${this.cfImageModel}`,
+          { prompt: cleanPrompt, steps: 4 },
+          {
+            headers: {
+              Authorization: `Bearer ${this.cfApiToken}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 90_000,
+          },
+        );
+
+        // flux-1-schnell returns base64 JPEG bytes in result.image.
+        const b64 = res.data?.result?.image;
+        if (res.data?.success && b64) {
+          this.logger.log(`[AIService] Cloudflare Workers AI succeeded in ${Date.now() - startedAt}ms`);
+          return {
+            success: true,
+            imageUrl: `data:image/jpeg;base64,${b64}`,
+            model: `cloudflare-${this.cfImageModel}`,
+          };
+        }
+        const errs = JSON.stringify(res.data?.errors || res.data).substring(0, 200);
+        this.logger.warn(`[AIService] Cloudflare returned no image: ${errs}. Falling back...`);
+      } catch (cfErr: any) {
+        const status = cfErr?.response?.status;
+        const raw = cfErr?.response?.data;
+        const msg = typeof raw === 'string' ? raw : raw ? JSON.stringify(raw) : cfErr.message;
+        this.logger.warn(
+          `[AIService] Cloudflare Workers AI failed (status=${status}): ${String(msg).substring(0, 200)}. Falling back...`,
+        );
+      }
+    }
+
+    // ── Tier 0b: Together AI FLUX.1-schnell (paid account required) ─────────
     if (this.togetherApiKey) {
       try {
         this.logger.log(`[AIService] Attempting Together AI image generation (${this.togetherImageModel})...`);
