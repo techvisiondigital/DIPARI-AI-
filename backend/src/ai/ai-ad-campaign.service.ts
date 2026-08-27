@@ -195,6 +195,22 @@ Return ONLY valid JSON matching this exact structure (no markdown, no code fence
       const descriptionText = aiResponse.description || 'Limited Time Offer';
       const ctaType = aiResponse.ctaType || 'LEARN_MORE';
 
+      // Generate an actual photographic background. Without this the ad banner
+      // was only the layout frame over a flat gradient — no product imagery at
+      // all — because this path never asked the image model for anything.
+      let bgImageUrl = '';
+      try {
+        const bannerPrompt =
+          aiResponse.adBannerPrompt ||
+          `Professional commercial advertising photograph for ${ctx?.businessName || category}, ` +
+            `showing ${category} as the main subject, promoting "${offer}", ` +
+            `photorealistic, clean composition, no text, no watermark`;
+        const imgResult = await this.aiService.generateImage(bannerPrompt, { aspect_ratio: '1:1' });
+        bgImageUrl = imgResult?.imageUrl || '';
+      } catch (imgErr: any) {
+        this.logger.warn(`Ad banner background generation failed: ${imgErr.message}. Rendering on gradient only.`);
+      }
+
       const imageBuffer = await this.graphicGeneratorService.generateBrandedGraphicBuffer({
         businessName: ctx?.businessName || category || 'Brand Workspace',
         offerText: offer,
@@ -207,6 +223,7 @@ Return ONLY valid JSON matching this exact structure (no markdown, no code fence
         email: contactEmail,
         website: websiteUrl,
         address: physicalAddress,
+        bgImageUrl,
       });
 
       const fileName = `ad_banner_${Date.now()}.png`;
