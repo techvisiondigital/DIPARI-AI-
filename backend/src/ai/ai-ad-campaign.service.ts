@@ -139,7 +139,7 @@ Return ONLY valid JSON matching this exact structure (no markdown, no code fence
   "headline": "Punchy offer headline under 40 characters",
   "description": "Urgency/social proof text under 30 characters",
   "ctaType": "LEARN_MORE",
-  "adBannerPrompt": "A 1080x1080 luxury studio lighting social media ad banner graphic for ${category} with bold modern typography featuring: ${offer}"
+  "adBannerPrompt": "A photorealistic 1080x1080 product photograph for ${category} with luxury studio lighting, evoking the mood of: ${offer}. Describe only the scene and subject - contains no text, letters or logos"
 }`;
 
     if (geminiApiKey) {
@@ -184,7 +184,7 @@ Return ONLY valid JSON matching this exact structure (no markdown, no code fence
         headline: offer.length <= 40 ? offer : `Special Offer: ${category}`,
         description: '⭐ 4.9/5 Rated • Limited Time',
         ctaType: 'LEARN_MORE',
-        adBannerPrompt: `High-converting modern 1080x1080 promo banner for ${category} in ${location}, featuring offer: ${offer}`,
+        adBannerPrompt: `Photorealistic 1080x1080 product photograph of ${category} in ${location}, luxury studio lighting, mood of ${offer}, no text or logos in the image`,
       };
     }
 
@@ -200,12 +200,26 @@ Return ONLY valid JSON matching this exact structure (no markdown, no code fence
       // all — because this path never asked the image model for anything.
       let bgImageUrl = '';
       try {
-        const bannerPrompt =
+        // The background must be a clean PHOTOGRAPH only. Image models render
+        // words as misspelled gibberish ("Festive colection", "RETAIL
+        // LIGINURY"), and the banner already draws real typography on top —
+        // so strip any typography/text wording out of the model's own prompt
+        // and state the constraint explicitly.
+        const rawPrompt =
           aiResponse.adBannerPrompt ||
-          `Professional commercial advertising photograph for ${ctx?.businessName || category}, ` +
-            `showing ${category} as the main subject, promoting "${offer}", ` +
-            `photorealistic, clean composition, no text, no watermark`;
-        const imgResult = await this.aiService.generateImage(bannerPrompt, { aspect_ratio: '1:1' });
+          `Commercial advertising photograph for ${ctx?.businessName || category} promoting "${offer}"`;
+
+        const photoPrompt =
+          rawPrompt
+            .replace(/\b(bold |modern |large )?(typography|text|lettering|caption|headline|wordmark|slogan|writing|font)\b[^,.]*/gi, '')
+            .replace(/\bfeaturing:?\s*/gi, 'inspired by ')
+            .replace(/\s{2,}/g, ' ')
+            .trim() +
+          `. Photorealistic commercial product photography of ${category} as the unmistakable main subject. ` +
+          `Absolutely NO text, NO words, NO letters, NO numbers, NO logos, NO watermarks, NO signage anywhere in the image. ` +
+          `Leave the lower third visually uncluttered for an overlay.`;
+
+        const imgResult = await this.aiService.generateImage(photoPrompt, { aspect_ratio: '1:1' });
         bgImageUrl = imgResult?.imageUrl || '';
       } catch (imgErr: any) {
         this.logger.warn(`Ad banner background generation failed: ${imgErr.message}. Rendering on gradient only.`);
