@@ -1,4 +1,7 @@
-import { Controller, Post, Get, Patch, Body, Param, Query, BadRequestException } from '@nestjs/common';
+import {
+  Controller, Post, Get, Patch, Body, Param, Query, Headers,
+  BadRequestException, UnauthorizedException,
+} from '@nestjs/common';
 import { SchedulerService } from './scheduler.service';
 import { calculateScheduleDetails, FrequencyRule } from '../utils/schedule-calculator';
 import { CloudTasksService, ScheduledPostTask } from './cloud-tasks.service';
@@ -67,9 +70,36 @@ export class SchedulerController {
     };
   }
 
-  /** POST /scheduler/trigger — manually trigger the content posting job */
+  /**
+   * POST /scheduler/trigger — publish every post whose scheduled time has passed.
+   *
+   * This is the same job the internal 10-minute cron runs, exposed so an
+   * external scheduler can drive it. That matters on hosts that suspend an idle
+   * service: a sleeping process cannot run its own timer, so posts would sit
+   * unpublished until somebody happened to visit the site.
+   *
+   * It publishes to real Facebook/Instagram accounts, so it is protected by a
+   * shared secret. Set CRON_SECRET and send it as the x-cron-secret header (or
+   * ?token=). If CRON_SECRET is unset the endpoint stays open, which keeps
+   * existing setups working but is logged as a warning — anyone could otherwise
+   * force-publish a business's queue.
+   */
   @Post('trigger')
-  async triggerScheduler() {
+  async triggerScheduler(
+    @Headers('x-cron-secret') headerSecret?: string,
+    @Query('token') queryToken?: string,
+  ) {
+    const expected = process.env.CRON_SECRET?.trim();
+    if (expected) {
+      const provided = (headerSecret || queryToken || '').trim();
+      if (provided !== expected) {
+        throw new UnauthorizedException('Invalid or missing scheduler token.');
+      }
+    } else {
+      console.warn(
+        '[SchedulerController] /scheduler/trigger is publicly callable because CRON_SECRET is not set. Anyone can force-publish scheduled posts.',
+      );
+    }
     return this.schedulerService.triggerAutomatedPosting();
   }
 
