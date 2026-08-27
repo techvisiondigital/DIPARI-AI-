@@ -311,10 +311,25 @@ export class FirebaseService implements OnModuleInit {
   private async uploadToCloudinary(
     buffer: Buffer,
     destinationPath: string,
+    contentType: string = 'image/png',
   ): Promise<string> {
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
-    const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
-    const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+    let cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+    let apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+    let apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+
+    // Cloudinary's dashboard hands you a single CLOUDINARY_URL of the form
+    // cloudinary://<api_key>:<api_secret>@<cloud_name>. Accept that too, so
+    // one variable can be pasted instead of three.
+    const combined = process.env.CLOUDINARY_URL?.trim();
+    if (combined && (!cloudName || !apiKey || !apiSecret)) {
+      const m = combined.match(/^cloudinary:\/\/([^:]+):([^@]+)@(.+)$/);
+      if (m) {
+        apiKey = apiKey || m[1];
+        apiSecret = apiSecret || m[2];
+        cloudName = cloudName || m[3];
+      }
+    }
+
     if (!cloudName || !apiKey || !apiSecret) return '';
 
     try {
@@ -328,7 +343,7 @@ export class FirebaseService implements OnModuleInit {
       const signature = createHash('sha1').update(toSign).digest('hex');
 
       const form = new URLSearchParams();
-      form.append('file', `data:image/png;base64,${buffer.toString('base64')}`);
+      form.append('file', `data:${contentType};base64,${buffer.toString('base64')}`);
       form.append('api_key', apiKey);
       form.append('timestamp', String(timestamp));
       form.append('public_id', publicId);
@@ -366,7 +381,7 @@ export class FirebaseService implements OnModuleInit {
 
     // Preferred: Cloudinary. Works on a free plan with no card, unlike Firebase
     // Storage which now requires Blaze billing.
-    const cloudinaryUrl = await this.uploadToCloudinary(buffer, destinationPath);
+    const cloudinaryUrl = await this.uploadToCloudinary(buffer, destinationPath, contentType);
     if (cloudinaryUrl) {
       return { publicUrl: cloudinaryUrl, storagePath: destinationPath };
     }
