@@ -121,7 +121,13 @@ export class AiService {
         ? configuredModel
         : 'minimax/minimax-m3:free';
     this.groqApiKey = process.env.GROQ_API_KEY || '';
-    this.groqModel = process.env.GROQ_MODEL || 'llama-3.3-70b-specdec';
+    // llama-3.3-70b-specdec (and llama-3.3-70b-versatile) were decommissioned
+    // by Groq — requests return "model_decommissioned", which silently killed
+    // the last-resort text fallback. Verified live against this key.
+    const configuredGroqModel = (process.env.GROQ_MODEL || '').trim();
+    this.groqModel = /llama-3\.3-70b/.test(configuredGroqModel) || !configuredGroqModel
+      ? 'openai/gpt-oss-20b'
+      : configuredGroqModel;
     this.hfApiKey = process.env.HF_API_KEY || '';
 
     if (!this.apiKey && !this.groqApiKey) {
