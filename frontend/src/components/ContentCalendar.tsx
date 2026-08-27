@@ -449,7 +449,13 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
         setPostModal(null);
         await fetchCalendar();
       } else {
-        onToast('Post Failed', 'Could not publish the post. Check Meta connection.', 'alert');
+        // Surface the actual reason Meta rejected it rather than a generic
+        // line — the per-platform errors say exactly what to fix.
+        const reasons = Object.entries(res.results || {})
+          .map(([platform, r]: [string, any]) => (r?.error ? `${platform}: ${r.error}` : null))
+          .filter(Boolean)
+          .join('  ');
+        onToast('Post Failed', reasons || 'Could not publish the post. Check your Meta connection.', 'alert');
       }
     } catch (err: any) {
       onToast('Post Failed', err.message || 'Error posting to Meta.', 'alert');

@@ -898,6 +898,29 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
    *   Step 1: POST /{ig_user_id}/media -> creates media container, returns creation_id
    *   Step 2: POST /{ig_user_id}/media_publish -> publishes container, returns instagram_post_id
    */
+  /**
+   * Meta fetches the image from the URL we hand it — it never receives the
+   * bytes. So any URL that only resolves on our own machine fails on Meta's
+   * side with an unhelpful error. Instagram additionally refuses data: URIs
+   * and requires a publicly reachable https link.
+   *
+   * Returns an explanatory message when the URL cannot work, or null when fine.
+   */
+  private describeUnreachableImage(imageUrl?: string | null): string | null {
+    if (!imageUrl) return null;
+
+    if (imageUrl.startsWith('data:')) {
+      return 'This post uses an inline image preview, which Meta cannot download. Regenerate the image so it is saved to a public URL first.';
+    }
+    if (/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?\//i.test(imageUrl)) {
+      return 'This post\'s image is stored at a local address that Meta cannot reach. Regenerate the image, then publish again.';
+    }
+    if (imageUrl.startsWith('http://')) {
+      return 'This post\'s image uses an insecure http link. Meta requires https. Regenerate the image, then publish again.';
+    }
+    return null;
+  }
+
   async publishInstagramPost(
     businessId: string,
     caption: string,
@@ -915,7 +938,29 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     const userDoc = ownerId && this.firebase.usersDao ? await this.firebase.usersDao.findById(ownerId) : null;
 
     const accessToken = workspace.metaAccessToken || userDoc?.metaAccessToken;
-    const igAccountId = workspace.metaIgBusinessAccountId || workspace.selectedInstagramAccountId || userDoc?.metaIgBusinessAccountId;
+    // Honour the account the user actually selected first.
+    const igAccountId = workspace.selectedInstagramAccountId || workspace.metaIgBusinessAccountId || userDoc?.metaIgBusinessAccountId;
+
+    if (!this.isMock) {
+      // A missing token used to fall into the mock branch below and report a
+      // successful publish that never happened.
+      if (!accessToken || accessToken.startsWith('mock_')) {
+        return {
+          success: false,
+          error: 'Meta is not connected for this business. Open Connect Meta and authorise your Facebook account.',
+        };
+      }
+      if (!igAccountId) {
+        return {
+          success: false,
+          error: 'No Instagram Business account selected. Pick one on the Connect Meta screen.',
+        };
+      }
+      const unreachableIg = this.describeUnreachableImage(imageUrl);
+      if (unreachableIg) {
+        return { success: false, error: unreachableIg };
+      }
+    }
 
     if (this.isMock || !accessToken || accessToken.startsWith('mock_')) {
       this.logger.log(`[MOCK] Simulated Instagram 2-step publish for business ${businessId}`);
@@ -995,14 +1040,30 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
   ): Promise<{ success: boolean; pagePostId?: string; error?: string }> {
     const workspace = (await this.firebase.workspacesDao?.findById(businessId)) || (await this.firebase.getBusinessById(businessId));
     const accessToken = workspace?.metaPageAccessToken || workspace?.metaAccessToken;
-    const pageId = workspace?.metaPageId || workspace?.selectedPageId;
+    // The page the user explicitly picked wins over whatever was captured at
+    // OAuth time, otherwise changing the selection had no effect.
+    const pageId = workspace?.selectedPageId || workspace?.metaPageId;
 
-    if (this.isMock || !accessToken || accessToken.startsWith('mock_')) {
+    if (this.isMock) {
       return { success: true, pagePostId: `mock_fb_post_${Date.now()}` };
     }
 
+    // Previously a missing token also returned a fake success, so the UI
+    // reported "Posted!" while nothing had been published anywhere.
+    if (!accessToken || accessToken.startsWith('mock_')) {
+      return {
+        success: false,
+        error: 'Meta is not connected for this business. Open Connect Meta and authorise your Facebook account.',
+      };
+    }
+
     if (!pageId) {
-      return { success: false, error: 'Facebook Page ID not connected' };
+      return { success: false, error: 'No Facebook Page selected. Choose a Page on the Connect Meta screen.' };
+    }
+
+    const unreachable = this.describeUnreachableImage(imageUrl);
+    if (unreachable) {
+      return { success: false, error: unreachable };
     }
 
     try {
