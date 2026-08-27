@@ -322,12 +322,18 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     if (this.isMock) {
       return `${redirectUri}?code=mock_oauth_code_12345&state=${state}`;
     }
+    // Verified against the live Graph API: without pages_manage_posts a Page
+    // publish is rejected, and reading lead forms returns
+    // "(#200) Requires pages_manage_ads permission to manage the object".
     const defaultScopes = [
       'ads_management',
       'ads_read',
       'business_management',
       'pages_show_list',
       'pages_read_engagement',
+      'pages_manage_posts',   // required to publish to a Facebook Page
+      'pages_manage_ads',     // required to read the Page's lead forms
+      'leads_retrieval',      // required to read the leads themselves
       'instagram_basic',
       'instagram_content_publish',
     ];
@@ -565,7 +571,10 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     }
 
     if (!business.metaAccessToken) {
-      return [{ id: 'page_1009827341', name: 'Brand Facebook Page', accessToken: 'mock_token', category: 'Brand', isMockFallback: true }];
+      throw new HttpException(
+        'Meta is not connected for this business. Open Connect Meta and authorise your Facebook account.',
+        HttpStatus.UNAUTHORIZED,
+      );
     }
 
     try {
@@ -579,13 +588,26 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
         },
       );
       const data = res.data.data || [];
-      if (data.length === 0) {
-        return [{ id: 'page_1009827341', name: 'Brand Facebook Page', accessToken: 'mock_token', category: 'Brand', isMockFallback: true }];
-      }
-      return data;
+
+      // Never return the Page access_token to a client. This endpoint has no
+      // auth guard, so echoing Meta's raw payload handed anyone who knew a
+      // businessId a working Facebook Page token. The frontend only needs the
+      // id and name to populate its dropdown.
+      return data.map((p: any) => ({
+        id: p.id,
+        name: p.name || 'Facebook Page',
+        category: p.category || 'General',
+        followers_count: p.followers_count ?? 0,
+        instagram_business_account: p.instagram_business_account
+          ? { id: p.instagram_business_account.id }
+          : undefined,
+      }));
     } catch (err: any) {
-      this.logger.warn('Failed to fetch Meta pages: ' + (err.response?.data?.error?.message || err.message));
-      return [{ id: 'page_1009827341', name: 'Brand Facebook Page', accessToken: 'mock_token', category: 'Brand', isMockFallback: true }];
+      // Returning a placeholder "Brand Facebook Page" here put a page that does
+      // not exist into the user's dropdown.
+      const detail = describeMetaError(err);
+      this.logger.error(`Failed to fetch Meta pages for business ${businessId}: ${detail}`);
+      throw new HttpException(`Could not load your Facebook Pages: ${detail}`, HttpStatus.BAD_GATEWAY);
     }
   }
 
@@ -781,10 +803,11 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       }
     }
 
+    // No access token in the response — see the note in getMetaPages. This
+    // endpoint is unauthenticated, so a token here is a credential leak.
     let pages: any[] = pageList.map(p => ({
       id: p.id,
       name: p.name || 'Facebook Page',
-      accessToken: p.access_token || accessToken,
       category: p.category || 'General',
       isMockFallback: !!p.isMockFallback,
     }));
@@ -1559,8 +1582,12 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
         campaignStatus: data.campaign_status || 'UNKNOWN',
       };
     } catch (err: any) {
-      this.logger.error('Failed to fetch Meta analytics', err.response?.data || err.message);
-      throw new HttpException('Failed to fetch analytics from Meta API', HttpStatus.BAD_GATEWAY);
+      // Report what Meta actually said — a generic sentence gives the user
+      // nothing to act on (the leads endpoint proved how useful the real
+      // message is: it named the exact missing permission).
+      const detail = describeMetaError(err);
+      this.logger.error(`Failed to fetch Meta analytics for business ${businessId}: ${detail}`);
+      throw new HttpException(`Could not load Meta analytics: ${detail}`, HttpStatus.BAD_GATEWAY);
     }
   }
 
