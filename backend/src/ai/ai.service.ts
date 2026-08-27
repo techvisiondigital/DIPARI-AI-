@@ -106,6 +106,15 @@ export class AiService {
   private readonly hfBaseUrl = 'https://router.huggingface.co';
   private readonly hfImageRoute = 'fal-ai/fal-ai/flux/schnell';
 
+  /**
+   * Together AI serves FLUX.1-schnell on a free tier, which matters because the
+   * Hugging Face route runs on a $0.10/month credit (~30 images) that is
+   * exhausted almost immediately. Tried first when a key is present.
+   */
+  private readonly togetherApiKey: string;
+  private readonly togetherImageModel: string;
+  private readonly togetherBaseUrl = 'https://api.together.ai/v1/images/generations';
+
   constructor() {
     this.apiKey = process.env.OPENROUTER_API_KEY || '';
     // `openrouter/auto` is explicitly rejected here: it is a paid router, and
@@ -129,6 +138,9 @@ export class AiService {
       ? 'openai/gpt-oss-20b'
       : configuredGroqModel;
     this.hfApiKey = process.env.HF_API_KEY || '';
+    this.togetherApiKey = process.env.TOGETHER_API_KEY || '';
+    this.togetherImageModel =
+      process.env.TOGETHER_IMAGE_MODEL?.trim() || 'black-forest-labs/FLUX.1-schnell';
 
     if (!this.apiKey && !this.groqApiKey) {
       this.logger.warn('Neither OPENROUTER_API_KEY nor GROQ_API_KEY is set. AI features will use fallback responses.');
@@ -646,6 +658,47 @@ ${promptDetails?.topic ? `Specific Post Topic: ${promptDetails.topic}` : ''}`;
     } else if (ar === '9:16') {
       width = 576;
       height = 1024;
+    }
+
+    // ── Tier 0: Together AI FLUX.1-schnell (free tier) ──────────────────────
+    if (this.togetherApiKey) {
+      try {
+        this.logger.log(`[AIService] Attempting Together AI image generation (${this.togetherImageModel})...`);
+        // FLUX schnell on Together takes aspect_ratio rather than width/height.
+        const aspectRatio = ar === '9:16' ? '9:16' : ar === '4:5' ? '4:5' : '1:1';
+        const res = await axios.post(
+          this.togetherBaseUrl,
+          {
+            model: this.togetherImageModel,
+            prompt: cleanPrompt,
+            aspect_ratio: aspectRatio,
+            steps: 4,
+            n: 1,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${this.togetherApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 90_000,
+          },
+        );
+
+        const item = res.data?.data?.[0];
+        const generatedUrl = item?.url || (item?.b64_json ? `data:image/png;base64,${item.b64_json}` : '');
+        if (generatedUrl) {
+          this.logger.log(`[AIService] Together AI succeeded in ${Date.now() - startedAt}ms`);
+          return { success: true, imageUrl: generatedUrl, model: `together-${this.togetherImageModel}` };
+        }
+        this.logger.warn('[AIService] Together AI returned no image; falling through.');
+      } catch (tErr: any) {
+        const status = tErr?.response?.status;
+        const raw = tErr?.response?.data;
+        const msg = typeof raw === 'string' ? raw : raw ? JSON.stringify(raw) : tErr.message;
+        this.logger.warn(
+          `[AIService] Together AI image generation failed (status=${status}): ${String(msg).substring(0, 200)}. Falling back...`,
+        );
+      }
     }
 
     // ── Tier 1: Hugging Face FLUX.1-schnell ─────────────────────────────────
