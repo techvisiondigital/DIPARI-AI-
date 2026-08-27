@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import * as admin from 'firebase-admin';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
+import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 import { UsersDao } from './daos/users.dao';
@@ -297,12 +298,78 @@ export class FirebaseService implements OnModuleInit {
    * Upload a file buffer (e.g. generated 1080x1080 PNG graphic) to Firebase Storage,
    * making it publicly accessible and returning the public download URL.
    */
+  /**
+   * Uploads to Cloudinary using a signed REST call — no extra npm package.
+   * Returns '' when Cloudinary is not configured or the upload fails, so the
+   * caller can fall through to the next storage option.
+   *
+   * Firebase Storage requires the paid Blaze plan; this exists so generated
+   * creatives have a durable, publicly fetchable home on a free plan. The URL
+   * must be publicly reachable because Meta fetches it when publishing posts
+   * and building ad creatives.
+   */
+  private async uploadToCloudinary(
+    buffer: Buffer,
+    destinationPath: string,
+  ): Promise<string> {
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+    const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+    const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+    if (!cloudName || !apiKey || !apiSecret) return '';
+
+    try {
+      // public_id keeps our own folder structure; strip the file extension.
+      const publicId = destinationPath.replace(/\.[a-zA-Z0-9]+$/, '');
+      const timestamp = Math.floor(Date.now() / 1000);
+
+      // Cloudinary signature: sha1 of the signed params in alphabetical order
+      // followed by the API secret.
+      const toSign = `public_id=${publicId}&timestamp=${timestamp}${apiSecret}`;
+      const signature = createHash('sha1').update(toSign).digest('hex');
+
+      const form = new URLSearchParams();
+      form.append('file', `data:image/png;base64,${buffer.toString('base64')}`);
+      form.append('api_key', apiKey);
+      form.append('timestamp', String(timestamp));
+      form.append('public_id', publicId);
+      form.append('signature', signature);
+
+      const res = await axios.post(
+        `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+        form.toString(),
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          timeout: 60_000,
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity,
+        },
+      );
+
+      const url = res.data?.secure_url || '';
+      if (url) {
+        this.logger.log(`[FirebaseService] Uploaded to Cloudinary: ${url}`);
+      }
+      return url;
+    } catch (err: any) {
+      const detail = err?.response?.data?.error?.message || err.message;
+      this.logger.warn(`[FirebaseService] Cloudinary upload failed: ${detail}`);
+      return '';
+    }
+  }
+
   async uploadFileBuffer(
     buffer: Buffer,
     destinationPath: string,
     contentType: string = 'image/png',
   ): Promise<{ publicUrl: string; storagePath: string }> {
     const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || 'campaignai-1044d.firebasestorage.app';
+
+    // Preferred: Cloudinary. Works on a free plan with no card, unlike Firebase
+    // Storage which now requires Blaze billing.
+    const cloudinaryUrl = await this.uploadToCloudinary(buffer, destinationPath);
+    if (cloudinaryUrl) {
+      return { publicUrl: cloudinaryUrl, storagePath: destinationPath };
+    }
 
     // Firebase Admin is initialized lazily by getDb().  Uploads used to just
     // test `admin.apps.length > 0`, so any request that had not already touched
