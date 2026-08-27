@@ -694,35 +694,53 @@ ${promptDetails?.topic ? `Specific Post Topic: ${promptDetails.topic}` : ''}`;
       this.logger.warn('[AIService] HF_API_KEY not set — skipping HF image generation. Add HF_API_KEY to .env for better image quality.');
     }
 
-    // ── Tier 2: Pollinations AI — flux model ────────────────────────────────
+    // ── Tier 2/3: Pollinations ──────────────────────────────────────────────
+    // Once the Hugging Face monthly credit is spent (402), Pollinations is the
+    // only remaining image source, and it returns a transient 500 often enough
+    // that a single attempt is not good enough — one observed 500 was followed
+    // by a clean 200 seconds later. Each model gets a retry with a short pause.
     const encodedPrompt = encodeURIComponent(cleanPrompt);
     const timestamp = Date.now();
-    const pollinationsFluxUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&model=flux&seed=${timestamp}`;
 
-    try {
-      this.logger.log(`[AIService] Attempting Pollinations flux image generation...`);
-      const checkRes = await axios.get(pollinationsFluxUrl, {
-        responseType: 'arraybuffer',
-        timeout: 30_000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0',
-          Accept: 'image/*',
-        },
-      });
-      if (checkRes.status === 200 && checkRes.data?.byteLength > 1000) {
-        const durationMs = Date.now() - startedAt;
-        this.logger.log(`[AIService] Pollinations flux succeeded in ${durationMs}ms`);
-        return { success: true, imageUrl: pollinationsFluxUrl, model: 'pollinations-flux' };
+    const buildUrl = (model: string, seed: number) =>
+      `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&model=${model}&seed=${seed}`;
+
+    for (const model of ['flux', 'turbo']) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const url = buildUrl(model, timestamp + attempt);
+        try {
+          this.logger.log(`[AIService] Attempting Pollinations ${model} (attempt ${attempt})...`);
+          const res = await axios.get(url, {
+            responseType: 'arraybuffer',
+            timeout: 60_000,
+            headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'image/*' },
+          });
+          if (res.status === 200 && res.data?.byteLength > 1000) {
+            this.logger.log(
+              `[AIService] Pollinations ${model} succeeded in ${Date.now() - startedAt}ms`,
+            );
+            return { success: true, imageUrl: url, model: `pollinations-${model}` };
+          }
+          this.logger.warn(`[AIService] Pollinations ${model} returned an unusable body.`);
+        } catch (polErr: any) {
+          const status = polErr?.response?.status;
+          this.logger.warn(
+            `[AIService] Pollinations ${model} attempt ${attempt} failed${status ? ` (status=${status})` : ''}: ${polErr.message}`,
+          );
+        }
+        if (attempt === 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2_500));
+        }
       }
-    } catch (polErr: any) {
-      this.logger.warn(`[AIService] Pollinations flux failed: ${polErr.message}. Falling back to Pollinations turbo...`);
     }
 
-    // ── Tier 3: Pollinations AI — turbo model (fastest) ─────────────────────
-    const pollinationsTurboUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&model=turbo&seed=${timestamp}`;
-    const durationMs = Date.now() - startedAt;
-    this.logger.warn(`[AIService] All primary image providers failed. Using Pollinations turbo URL as final fallback. Duration: ${durationMs}ms`);
-    return { success: true, imageUrl: pollinationsTurboUrl, model: 'pollinations-turbo' };
+    // Everything failed. Return an empty URL rather than a link that was never
+    // verified — callers composite over a plain gradient instead of silently
+    // embedding a dead image reference that Meta would later fail to fetch.
+    this.logger.error(
+      `[AIService] All image providers failed after retries (${Date.now() - startedAt}ms). No background image will be used.`,
+    );
+    return { success: false, imageUrl: '', model: 'none' };
   }
 
   private buildResponse<T>(
