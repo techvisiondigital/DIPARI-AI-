@@ -234,38 +234,14 @@ export function AdminPortal({ user, onLogout, addToast }: AdminPortalProps) {
     profileVisits: 0,
     newFollowers: 0,
     engagement: 0,
-    placements: [
-      { name: 'Instagram Reels', spend: 18434, ctr: 3.85, share: 45, conversions: 242 },
-      { name: 'Facebook Mobile Feed', spend: 12289, ctr: 2.94, share: 30, conversions: 145 },
-      { name: 'Instagram Stories', spend: 6144, ctr: 3.12, share: 15, conversions: 78 },
-      { name: 'Facebook Reels', spend: 4099, ctr: 2.10, share: 10, conversions: 33 },
-    ],
-    demographics: {
-      femalePct: 58,
-      malePct: 42,
-      ageRanges: [
-        { range: '18 - 24', pct: 28 },
-        { range: '25 - 34', pct: 44 },
-        { range: '35 - 44', pct: 20 },
-        { range: '45+', pct: 8 },
-      ],
-    },
-    topCities: [
-      { city: 'Mumbai', spend: 14200, roas: 4.12, cpl: 78.20 },
-      { city: 'Bangalore', spend: 11800, roas: 3.95, cpl: 82.50 },
-      { city: 'Delhi NCR', spend: 9400, roas: 3.65, cpl: 91.00 },
-      { city: 'Pune', spend: 4500, roas: 3.52, cpl: 88.40 },
-      { city: 'Hyderabad', spend: 2600, roas: 3.40, cpl: 94.10 },
-    ],
-    dailyTrend: [
-      { date: 'Jul 25', spend: 2400, revenue: 8900 },
-      { date: 'Jul 27', spend: 2800, revenue: 10500 },
-      { date: 'Jul 29', spend: 3100, revenue: 11800 },
-      { date: 'Jul 31', spend: 3000, revenue: 11200 },
-      { date: 'Aug 02', spend: 3400, revenue: 13200 },
-      { date: 'Aug 04', spend: 3200, revenue: 12400 },
-      { date: 'Aug 06', spend: 3800, revenue: 15100 },
-    ],
+    // These were seeded with invented figures (placement spend, city ROAS, a
+    // 7-day revenue trend, 58/42 gender split) that rendered as live client
+    // telemetry and persisted whenever the real Meta call returned nothing.
+    // They now start empty so only genuine Meta data is ever displayed.
+    placements: [] as any[],
+    demographics: null as { femalePct: number; malePct: number } | null,
+    topCities: [] as any[],
+    dailyTrend: [] as any[],
   });
 
   const handleSyncMetaInsights = async () => {
@@ -1956,6 +1932,11 @@ export function AdminPortal({ user, onLogout, addToast }: AdminPortalProps) {
                 <div style={{ padding: 24, background: '#0f172a', border: '1px solid #1e293b', borderRadius: 12 }}>
                   <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 16, color: '#f8fafc' }}>Meta Placement Performance Split</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {insightsData.placements.length === 0 && (
+                      <p style={{ margin: 0, fontSize: '0.78rem', color: '#64748b', lineHeight: 1.6 }}>
+                        No placement data returned by Meta for this client yet. It appears here once campaigns have delivered impressions.
+                      </p>
+                    )}
                     {insightsData.placements.map((p: any, idx: number) => (
                       <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
@@ -1973,7 +1954,11 @@ export function AdminPortal({ user, onLogout, addToast }: AdminPortalProps) {
                 {/* Audience Demographics */}
                 <div style={{ padding: 24, background: '#0f172a', border: '1px solid #1e293b', borderRadius: 12 }}>
                   <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 16, color: '#f8fafc' }}>Audience Demographics Auditing</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 16, alignItems: 'center' }}>
+                  {!insightsData.demographics ? (
+                    <p style={{ margin: 0, fontSize: '0.78rem', color: '#64748b', lineHeight: 1.6 }}>
+                      No audience breakdown returned by Meta for this client yet. Meta only reports a gender/age split once campaigns have delivered enough impressions.
+                    </p>
+                  ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
                       <div style={{
                         width: 90, height: 90, borderRadius: '50%',
@@ -1989,19 +1974,7 @@ export function AdminPortal({ user, onLogout, addToast }: AdminPortalProps) {
                         <span style={{ color: '#94a3b8' }}>● Male ({insightsData.demographics.malePct}%)</span>
                       </div>
                     </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {insightsData.demographics.ageRanges.map((a: any, idx: number) => (
-                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.75rem' }}>
-                          <span style={{ width: 50, color: '#94a3b8' }}>{a.range}</span>
-                          <div style={{ flex: 1, height: 6, background: '#1e293b', borderRadius: 3, overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${a.pct}%`, background: '#818cf8' }} />
-                          </div>
-                          <span style={{ width: 30, textAlign: 'right', fontWeight: 700, color: '#f8fafc' }}>{a.pct}%</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
 

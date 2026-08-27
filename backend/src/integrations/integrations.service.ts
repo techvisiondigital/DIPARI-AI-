@@ -1858,37 +1858,8 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       );
     }
 
-    if (!metaAccessToken) {
-      const budgetVal = parseInt((business?.profile?.monthlyBudget || '40000').replace(/[^0-9]/g, '')) || 40000;
-      const spend = Math.round(budgetVal * 0.95);
-      const clicks = Math.round(spend / 3.58);
-      const impressions = Math.round(clicks * 30.5);
-      const reach = Math.round(impressions * 0.81);
-
-      return {
-        totalSpend: spend,
-        impressions,
-        reach,
-        clicks,
-        ctr: 3.28,
-        cpc: 3.58,
-        cpl: 82.26,
-        conversions: Math.round(clicks * 0.043),
-        roas: 3.84,
-        isLiveMeta: false,
-        datePreset: effectivePreset,
-        demographics: {
-          femalePct: 58,
-          malePct: 42,
-          ageRanges: [
-            { range: '18 - 24', pct: 28 },
-            { range: '25 - 34', pct: 44 },
-            { range: '35 - 44', pct: 20 },
-            { range: '45+', pct: 8 },
-          ],
-        },
-      };
-    }
+    // (The unreachable simulated-analytics block that used to sit here was
+    // removed — the guard above already rejects a missing token.)
 
     try {
       const cleanAdAccountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
@@ -1916,14 +1887,15 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       const clicks = parseInt(data.clicks || 0);
       const ctr = parseFloat(data.ctr || 0);
       const cpc = parseFloat(data.cpc || 0);
-      const roas = spend > 0 && purchaseValue > 0 ? parseFloat((purchaseValue / spend).toFixed(2)) : 3.84;
+      // 0, not an invented 3.84, when there is no purchase value to divide by.
+      const roas = spend > 0 && purchaseValue > 0 ? parseFloat((purchaseValue / spend).toFixed(2)) : 0;
 
-      // Gender + Age breakdown
-      let demographics: any = { femalePct: 58, malePct: 42, ageRanges: [
-        { range: '18 - 24', pct: 28 }, { range: '25 - 34', pct: 44 },
-        { range: '35 - 44', pct: 20 }, { range: '45+', pct: 8 }
-      ] };
-      
+      // Gender + Age breakdown.  This used to be seeded with hardcoded
+      // percentages (58/42 and a fixed age spread) that were returned as real
+      // data whenever the breakdown call below failed or came back empty.
+      // It now stays null until Meta actually provides numbers.
+      let demographics: { femalePct: number; malePct: number } | null = null;
+
       try {
         const demoRes = await axios.get(
           `https://graph.facebook.com/v19.0/${cleanAdAccountId}/insights`,
@@ -1947,8 +1919,8 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
           }
           const tot = genderTotals.male + genderTotals.female;
           if (tot > 0) {
-            demographics.femalePct = Math.round((genderTotals.female / tot) * 100);
-            demographics.malePct = 100 - demographics.femalePct;
+            const femalePct = Math.round((genderTotals.female / tot) * 100);
+            demographics = { femalePct, malePct: 100 - femalePct };
           }
         }
       } catch (demoErr: any) {
@@ -2027,37 +1999,13 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
         demographics,
       };
     } catch (err: any) {
-      this.logger.warn(`Live Meta Graph API Insights call notice: ${err.response?.data?.error?.message || err.message}`);
-      const budgetVal = parseInt((business?.profile?.monthlyBudget || '40000').replace(/[^0-9]/g, '')) || 40000;
-      const spend = Math.round(budgetVal * 0.95);
-      const clicks = Math.round(spend / 3.58);
-      const impressions = Math.round(clicks * 30.5);
-      const reach = Math.round(impressions * 0.81);
-
-      return {
-        totalSpend: spend,
-        impressions,
-        reach,
-        clicks,
-        ctr: 3.28,
-        cpc: 3.58,
-        cpl: 82.26,
-        conversions: Math.round(clicks * 0.043),
-        roas: 3.84,
-        isLiveMeta: false,
-        metaError: err.response?.data?.error?.message || err.message,
-        datePreset: effectivePreset,
-        demographics: {
-          femalePct: 58,
-          malePct: 42,
-          ageRanges: [
-            { range: '18 - 24', pct: 28 },
-            { range: '25 - 34', pct: 44 },
-            { range: '35 - 44', pct: 20 },
-            { range: '45+', pct: 8 },
-          ],
-        },
-      };
+      // This catch used to invent analytics — spend derived from the monthly
+      // budget, plus fixed CTR/CPC/ROAS and demographic percentages — and
+      // return them as if they were real.  Reporting fabricated ad performance
+      // is worse than reporting nothing, so surface the actual Meta failure.
+      const detail = describeMetaError(err);
+      this.logger.error(`Meta insights call failed for business ${businessId}: ${detail}`);
+      throw new HttpException(`Could not load Meta analytics: ${detail}`, HttpStatus.BAD_GATEWAY);
     }
   }
 }
