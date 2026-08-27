@@ -304,6 +304,21 @@ export class FirebaseService implements OnModuleInit {
   ): Promise<{ publicUrl: string; storagePath: string }> {
     const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || 'campaignai-1044d.firebasestorage.app';
 
+    // Firebase Admin is initialized lazily by getDb().  Uploads used to just
+    // test `admin.apps.length > 0`, so any request that had not already touched
+    // Firestore skipped the real upload entirely and silently fell through to
+    // the local-disk fallback below — producing a localhost URL that no
+    // browser can load.  Force initialization first.
+    if (process.env.FIREBASE_PROJECT_ID) {
+      try {
+        this.getDb();
+      } catch (initErr: any) {
+        this.logger.error(
+          `[FirebaseService] Firebase Admin initialization failed (${initErr.message}). Check FIREBASE_PRIVATE_KEY / FIREBASE_CLIENT_EMAIL.`,
+        );
+      }
+    }
+
     if (process.env.FIREBASE_PROJECT_ID && admin.apps.length > 0) {
       try {
         const bucket = admin.storage().bucket(storageBucket);
@@ -352,8 +367,20 @@ export class FirebaseService implements OnModuleInit {
     const localFilePath = path.join(uploadsDir, fileName);
     fs.writeFileSync(localFilePath, buffer);
 
-    const publicUrl = `http://localhost:3001/uploads/${fileName}`;
-    this.logger.log(`[FirebaseService] File saved locally to mock storage: ${publicUrl}`);
+    // Never hardcode localhost — in production this URL is handed to browsers
+    // and to Meta, both of which simply cannot reach the server's own machine.
+    const base = (process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3001}`)
+      .trim()
+      .replace(/\/+$/, '');
+    const publicUrl = `${base}/uploads/${fileName}`;
+
+    if (process.env.FIREBASE_PROJECT_ID) {
+      this.logger.error(
+        `[FirebaseService] Firebase Storage was configured but the upload did not succeed, so this file fell back to local disk: ${publicUrl}. On a container host this disk is ephemeral and the file will be lost on restart — fix the Storage credentials.`,
+      );
+    } else {
+      this.logger.log(`[FirebaseService] File saved locally to mock storage: ${publicUrl}`);
+    }
     return { publicUrl, storagePath: destinationPath };
   }
 
