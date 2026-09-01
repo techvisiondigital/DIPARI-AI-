@@ -35,6 +35,7 @@ import {
   Settings as SettingsIcon,
   Sparkles,
   Users,
+  PenLine,
 } from 'lucide-react';
 import { api } from './services/api';
 import { auth } from './services/firebase';
@@ -48,7 +49,7 @@ import { ContentCalendar } from './components/ContentCalendar';
 import { LeadsDashboard } from './components/LeadsDashboard';
 import { ProfileScreen } from './components/ProfileScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { SmartInputControls } from './components/SmartInputControls';
+import { SmartInputControls, TypeAheadSuggestions } from './components/SmartInputControls';
 import { BusinessBlueprintReview } from './components/BusinessBlueprintReview';
 
 
@@ -66,12 +67,12 @@ const DEFAULT_ONBOARDING_QUESTIONS = [
   'What category does your business fall under? (e.g., E-commerce, SaaS, Restaurant, Fashion, Healthcare, Education, Real Estate, etc.)',
   'What products or services does your business offer?',
   'Who is your ideal target audience? Describe your ideal customer.',
-  'What is the age group of your target customers? (e.g., 18-24, 25-34, 35-44, 45-54, 55+)',
+  'What is the age group of your target customers? (e.g., 18-24, 25-34, 35-44, 45-54, 55-65+)',
   'Who do you primarily target? (Male / Female / Both)',
-  'What geographic locations do you serve? (City, State, Country, or Global)',
+  'What geographic locations do you serve? (Local area by PIN code, City, or State)',
   'What are your primary business goals right now? (e.g., Increase sales, Generate leads, Build brand awareness)',
   'What is your monthly marketing budget? (in your local currency)',
-  'Who are your main competitors? List 2-3 competitor names.',
+  'Who are your main competitors? Add their name, social media, or website.',
   'How would you describe your brand tone? (e.g., Professional, Casual, Fun, Luxury, Friendly, Bold)',
   'How often would you like to post on social media? (e.g., Daily, 3 times/week, 5 times/week, Weekly)',
   'What languages should your marketing content be in? (e.g., English, Hindi, Spanish, or multiple)',
@@ -1232,6 +1233,28 @@ export default function App() {
               <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
                 Our AI Planner is gathering business objectives to configure SWOT analysis grids and create target demographic parameters.
               </p>
+
+              {/* Free-text guidance for the person answering */}
+              <div style={{
+                marginTop: 18,
+                padding: '14px 16px',
+                borderRadius: 12,
+                border: '1px solid var(--color-border)',
+                background: 'rgba(99, 102, 241, 0.08)',
+                display: 'flex',
+                gap: 10,
+                alignItems: 'flex-start',
+              }}>
+                <PenLine size={16} style={{ color: '#818cf8', flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: 4 }}>
+                    You have to answer in free text
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                    Type your answer in your own words. The suggestion chips are optional shortcuts &mdash; you can pick several, edit them, or ignore them entirely.
+                  </div>
+                </div>
+              </div>
             </div>
             
             {/* Progress bar */}
@@ -1322,6 +1345,16 @@ export default function App() {
             <div style={{ padding: '20px 10% 40px 10%', borderTop: '1px solid var(--color-border)' }}>
               {!isOnboardingCompleted ? (
                 <div>
+                  {/* Autocomplete shown while the user types free text */}
+                  <TypeAheadSuggestions
+                    currentField={currentFieldKey}
+                    value={chatbotInput}
+                    onSelectOption={(opt) => {
+                      setChatbotInput(opt);
+                      setValidationError(null);
+                    }}
+                  />
+
                   {/* Smart UI Input Controls per field */}
                   <div style={{ marginBottom: 12 }}>
                     <SmartInputControls
