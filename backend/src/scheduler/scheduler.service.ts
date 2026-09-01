@@ -11,6 +11,14 @@ import { RabbitMqService } from './rabbitmq.service';
 import { getPlanLimits } from '../payment/payment.constants';
 
 /**
+ * Admin listings are deliberately bounded to protect the Firestore read quota.
+ * Background jobs are different: skipping a business means its posts never
+ * publish, so they ask for a ceiling high enough to cover every account.
+ * Revisit this (and move to cursor pagination) well before it is reached.
+ */
+const BACKGROUND_JOB_BUSINESS_LIMIT = 5000;
+
+/**
  * SchedulerService — Phase 3 & 4: AI Auto Scheduler + Meta Auto Posting.
  *
  * Manages post scheduling lifecycle: SCHEDULED → PAUSED → PUBLISHING → PUBLISHED / FAILED / CANCELLED
@@ -343,7 +351,9 @@ export class SchedulerService implements OnModuleInit {
       }
     }
 
-    const businesses = await this.firebase.getAllBusinesses();
+    // Background publishing must see every business — an admin-sized page limit
+    // here would silently stop publishing for anyone outside the first page.
+    const businesses = await this.firebase.getAllBusinesses(BACKGROUND_JOB_BUSINESS_LIMIT);
     for (const business of businesses) {
       try {
         const entries = await this.firebase.getContentCalendarByBusinessId(business.id);
@@ -357,14 +367,36 @@ export class SchedulerService implements OnModuleInit {
         });
 
         for (const entry of due) {
+          // This loop previously flipped the entry straight to PUBLISHED
+          // without calling Meta at all, and only recorded FAILED if the
+          // Firestore write itself threw. A post that never reached Facebook
+          // still showed a green "Published" in the customer's calendar, so
+          // nobody found out until their audience did. Publish for real, and
+          // record what actually happened.
           try {
+            const publishResult = await this.publishToMeta({ ...entry, businessId: business.id });
+            const publishSucceeded = publishResult?.success !== false;
+
             await this.firebase.updateContentCalendarEntry(entry.id, {
-              status: 'PUBLISHED',
-              publishedAt: new Date(),
+              status: publishSucceeded ? 'PUBLISHED' : 'FAILED',
+              ...(publishSucceeded ? { publishedAt: new Date() } : {}),
+              publishResult,
             });
-            processed.push(entry.id);
+
+            if (publishSucceeded) {
+              processed.push(entry.id);
+            } else {
+              this.logger.warn(
+                `Calendar entry ${entry.id} was not published: ${publishResult?.error || 'unknown error'}`,
+              );
+              failed.push(entry.id);
+            }
           } catch (err: any) {
-            await this.firebase.updateContentCalendarEntry(entry.id, { status: 'FAILED' });
+            this.logger.error(`Failed to publish calendar entry ${entry.id}: ${err.message}`);
+            await this.firebase.updateContentCalendarEntry(entry.id, {
+              status: 'FAILED',
+              publishResult: { success: false, error: err.message },
+            });
             failed.push(entry.id);
           }
         }
@@ -437,7 +469,7 @@ export class SchedulerService implements OnModuleInit {
   }
 
   async getPendingCount(): Promise<{ pendingCount: number }> {
-    const businesses = await this.firebase.getAllBusinesses();
+    const businesses = await this.firebase.getAllBusinesses(BACKGROUND_JOB_BUSINESS_LIMIT);
     let count = 0;
     for (const b of businesses) {
       const entries = await this.firebase.getContentCalendarByBusinessId(b.id);
@@ -809,9 +841,12 @@ HASHTAGS: #tag1 #tag2 #tag3 #tag4 #tag5 #tag6 #tag7 #tag8`;
     const ownerId = workspace?.ownerId || (workspace as any)?.memberIds?.[0];
     const userDoc = ownerId && this.firebase.usersDao ? await this.firebase.usersDao.findById(ownerId) : null;
 
-    const pageId = workspace?.metaPageId || workspace?.selectedPageId;
+    // The user's explicit selection must win over the value auto-picked at
+    // connect time. This order was reversed, so choosing a different Page had
+    // no effect on scheduled publishing.
+    const pageId = workspace?.selectedPageId || workspace?.metaPageId;
     const pageAccessToken = workspace?.metaAccessToken || userDoc?.metaAccessToken;
-    const instagramAccountId = workspace?.metaIgBusinessAccountId || workspace?.selectedInstagramAccountId || userDoc?.metaIgBusinessAccountId;
+    const instagramAccountId = workspace?.selectedInstagramAccountId || workspace?.metaIgBusinessAccountId || userDoc?.metaIgBusinessAccountId;
 
     const fullCaption = post.hashtags?.length
       ? `${post.caption}\n\n${post.hashtags.join(' ')}`

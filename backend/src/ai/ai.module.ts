@@ -3,6 +3,7 @@ import { AiService } from './ai.service';
 import { AiAdCampaignService } from './ai-ad-campaign.service';
 import { AiAdCampaignController, ApiAiAdCampaignController } from './ai-ad-campaign.controller';
 import { GraphicGeneratorService } from '../content/graphic-generator.service';
+import { AuthModule } from '../auth/auth.module';
 
 import { BusinessModule } from '../business/business.module';
 
@@ -11,7 +12,7 @@ import { BusinessModule } from '../business/business.module';
  */
 @Global()
 @Module({
-  imports: [BusinessModule],
+  imports: [BusinessModule, AuthModule],
   controllers: [AiAdCampaignController, ApiAiAdCampaignController],
   providers: [AiService, AiAdCampaignService, GraphicGeneratorService],
   exports: [AiService, AiAdCampaignService, GraphicGeneratorService],

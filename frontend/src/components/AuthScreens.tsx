@@ -560,45 +560,6 @@ export function AuthScreens({ defaultView, onAuthSuccess, addToast, onBackToHome
                 </div>
               )}
 
-              {/* Test Credentials Helper Card */}
-              <div style={{ display: 'none' }} aria-hidden="true">
-                {/* Test credentials helper */}
-                <div style={{
-                  background: 'rgba(255,255,255,0.02)',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                  borderRadius: 12,
-                  padding: '12px 16px',
-                  fontSize: '0.8rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 8
-                }}>
-                  <div style={{ fontWeight: 600, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Shield size={12} />
-                    <span>💡 TEST CREDENTIALS (CLICK TO AUTOFILL)</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div
-                      onClick={() => { setEmail('demo@campaignai.com'); setPassword('password123'); }}
-                      style={{ display: 'flex', justifyContent: 'space-between', cursor: 'pointer', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.2s' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.08)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
-                    >
-                      <span>Client: <code style={{ color: '#fff' }}>demo@campaignai.com</code></span>
-                      <span style={{ opacity: 0.6 }}>Pass: <code style={{ color: '#fff' }}>password123</code></span>
-                    </div>
-                    <div
-                      onClick={() => { setEmail('admin@campaignai.com'); setPassword('password123'); }}
-                      style={{ display: 'flex', justifyContent: 'space-between', cursor: 'pointer', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.2s' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(0, 118, 163, 0.08)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
-                    >
-                      <span>Admin: <code style={{ color: '#fff' }}>admin@campaignai.com</code></span>
-                      <span style={{ opacity: 0.6 }}>Pass: <code style={{ color: '#fff' }}>password123</code></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </>
           )}
         </div>

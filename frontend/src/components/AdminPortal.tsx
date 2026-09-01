@@ -767,7 +767,7 @@ export function AdminPortal({ user, onLogout, addToast }: AdminPortalProps) {
   };
 
   const triggerSeoScan = async () => {
-    const websiteUrl = activeClientObject.website || activeClientObject.profile?.website || activeClientObject.profile?.websiteUrl || 'https://campaignai.in';
+    const websiteUrl = activeClientObject.website || activeClientObject.profile?.website || activeClientObject.profile?.websiteUrl || 'https://visionpilotai.techvisiondigital.in';
     try {
       const audit = await api.admin.runSeoAudit(selectedBusinessId, websiteUrl);
       const updatedSeo = {

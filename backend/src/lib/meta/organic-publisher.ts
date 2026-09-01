@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { GRAPH_API_BASE } from './graph-version';
 
 export interface OrganicPublisherInput {
   pageId: string;
@@ -25,7 +26,7 @@ export interface SimultaneousPublishResult {
 
 /**
  * Publishes a photo post directly to a Facebook Page via Graph API.
- * POST https://graph.facebook.com/v19.0/{page-id}/photos
+ * POST https://graph.facebook.com/<version>/{page-id}/photos
  */
 export async function publishToFacebookPage(input: {
   pageId: string;
@@ -49,7 +50,7 @@ export async function publishToFacebookPage(input: {
 
   try {
     const response = await axios.post(
-      `https://graph.facebook.com/v19.0/${pageId}/photos`,
+      `${GRAPH_API_BASE}/${pageId}/photos`,
       null,
       {
         params: {
@@ -76,8 +77,8 @@ export async function publishToFacebookPage(input: {
 
 /**
  * Publishes a photo post to an Instagram Business account via 2-step Graph API.
- * Step 1: POST https://graph.facebook.com/v19.0/{ig-user-id}/media (image_url, caption) -> creation_id
- * Step 2: POST https://graph.facebook.com/v19.0/{ig-user-id}/media_publish (creation_id) -> post ID
+ * Step 1: POST https://graph.facebook.com/<version>/{ig-user-id}/media (image_url, caption) -> creation_id
+ * Step 2: POST https://graph.facebook.com/<version>/{ig-user-id}/media_publish (creation_id) -> post ID
  */
 export async function publishToInstagramBusiness(input: {
   instagramAccountId: string;
@@ -103,7 +104,7 @@ export async function publishToInstagramBusiness(input: {
   try {
     // Step 1: POST /{ig-user-id}/media
     const containerRes = await axios.post(
-      `https://graph.facebook.com/v19.0/${instagramAccountId}/media`,
+      `${GRAPH_API_BASE}/${instagramAccountId}/media`,
       null,
       {
         params: {
@@ -121,7 +122,7 @@ export async function publishToInstagramBusiness(input: {
 
     // Step 2: POST /{ig-user-id}/media_publish
     const publishRes = await axios.post(
-      `https://graph.facebook.com/v19.0/${instagramAccountId}/media_publish`,
+      `${GRAPH_API_BASE}/${instagramAccountId}/media_publish`,
       null,
       {
         params: {

@@ -1,9 +1,13 @@
 import { Module } from '@nestjs/common';
 import { IntegrationsService } from './integrations.service';
-import { MetaController, ApiMetaController } from './meta.controller';
+import { MetaController, MetaPublicController, ApiMetaController } from './meta.controller';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  controllers: [MetaController, ApiMetaController],
+  // AuthModule supplies JwtAuthGuard and BusinessAccessGuard, which now protect
+  // every Meta endpoint except the OAuth redirect and the lead webhook.
+  imports: [AuthModule],
+  controllers: [MetaPublicController, MetaController, ApiMetaController],
   providers: [IntegrationsService],
   exports: [IntegrationsService],
 })

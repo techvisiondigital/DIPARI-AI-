@@ -670,6 +670,27 @@ export class FirebaseService implements OnModuleInit {
   }
 
   /**
+   * Looks up the business connected to a given Facebook Page.
+   *
+   * Lead webhooks arrive keyed by page_id, and this used to be resolved by
+   * loading every business and scanning in JS. That is both expensive and
+   * unreliable once the listing is bounded — a lead for a business outside the
+   * fetched window would be silently dropped. This queries the field directly.
+   *
+   * Requires single-field index on businesses.metaPageId (created automatically).
+   */
+  async getBusinessByMetaPageId(pageId: string) {
+    if (!pageId) return null;
+    const snap = await this.col('businesses')
+      .where('metaPageId', '==', pageId)
+      .limit(1)
+      .get();
+    if (snap.empty) return null;
+    const doc = snap.docs[0];
+    return { id: doc.id, ...doc.data() } as any;
+  }
+
+  /**
    * Returns all businesses where userId is in memberIds[].
    */
   async getBusinessesByUserId(userId: string) {

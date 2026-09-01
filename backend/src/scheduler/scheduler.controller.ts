@@ -2,6 +2,9 @@ import {
   Controller, Post, Get, Patch, Body, Param, Query, Headers,
   BadRequestException, UnauthorizedException,
 } from '@nestjs/common';
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { BusinessAccessGuard } from '../auth/business-access.guard';
 import { SchedulerService } from './scheduler.service';
 import { calculateScheduleDetails, FrequencyRule } from '../utils/schedule-calculator';
 import { CloudTasksService, ScheduledPostTask } from './cloud-tasks.service';
@@ -110,6 +113,7 @@ export class SchedulerController {
   }
 
   /** POST /scheduler/schedule — schedule a new post */
+  @UseGuards(JwtAuthGuard, BusinessAccessGuard)
   @Post('schedule')
   async schedulePost(@Body() body: {
     businessId: string;
@@ -131,6 +135,7 @@ export class SchedulerController {
   }
 
   /** GET /scheduler/posts?businessId=xxx — list all scheduled posts */
+  @UseGuards(JwtAuthGuard, BusinessAccessGuard)
   @Get('posts')
   async getScheduledPosts(@Query('businessId') businessId: string) {
     return this.schedulerService.getScheduledPosts(businessId);
@@ -164,6 +169,7 @@ export class SchedulerController {
   }
 
   /** POST /scheduler/schedule/organic — Schedule organic post to target local timezone slot */
+  @UseGuards(JwtAuthGuard, BusinessAccessGuard)
   @Post('schedule/organic')
   async scheduleOrganicPost(@Body() body: {
     businessId: string;
@@ -178,6 +184,7 @@ export class SchedulerController {
   }
 
   /** POST /scheduler/schedule/organic-batch — Schedule a batch of organic posts */
+  @UseGuards(JwtAuthGuard, BusinessAccessGuard)
   @Post('schedule/organic-batch')
   async scheduleOrganicBatch(@Body() body: {
     businessId: string;

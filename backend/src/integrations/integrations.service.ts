@@ -4,6 +4,7 @@ import axios from 'axios';
 import { FirebaseService } from '../firebase/firebase.service';
 import { AiService } from '../ai/ai.service';
 import { launchFullMetaCampaignHierarchy, describeMetaError } from '../lib/meta/ads-manager';
+import { GRAPH_API_BASE, FACEBOOK_DIALOG_BASE } from '../lib/meta/graph-version';
 
 dotenv.config();
 
@@ -338,7 +339,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       'instagram_content_publish',
     ];
     const scopesStr = process.env.META_SCOPES || defaultScopes.join(',');
-    return `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopesStr}&response_type=code&state=${state}&auth_type=rerequest`;
+    return `${FACEBOOK_DIALOG_BASE}/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopesStr}&response_type=code&state=${state}&auth_type=rerequest`;
   }
 
   async connectMeta(code: string, businessId: string, customRedirectUri?: string) {
@@ -390,14 +391,14 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
       // 1. Exchange code for short-lived user token
       this.logger.log(`Exchanging OAuth code for Meta access token for business ${businessId}`);
-      const tokenRes = await axios.get(`https://graph.facebook.com/v19.0/oauth/access_token`, {
+      const tokenRes = await axios.get(`${GRAPH_API_BASE}/oauth/access_token`, {
         params: { client_id: appId, client_secret: appSecret, redirect_uri: redirectUri, code },
       });
       let accessToken = tokenRes.data.access_token;
 
       // 2. Exchange short-lived token for long-lived user token (~60 days)
       const longLivedRes = await axios.get(
-        `https://graph.facebook.com/v19.0/oauth/access_token`,
+        `${GRAPH_API_BASE}/oauth/access_token`,
         { params: { grant_type: 'fb_exchange_token', client_id: appId, client_secret: appSecret, fb_exchange_token: accessToken } },
       );
       accessToken = longLivedRes.data.access_token;
@@ -407,7 +408,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
       // 3. Get user profile
       const userRes = await axios.get(
-        `https://graph.facebook.com/v19.0/me`,
+        `${GRAPH_API_BASE}/me`,
         { params: { fields: 'id,name,email', access_token: accessToken } },
       );
       const metaUserId = userRes.data.id;
@@ -415,7 +416,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
       // 3.5 Developer Mode Debug Logging: Query granted permissions
       try {
-        const permRes = await axios.get(`https://graph.facebook.com/v19.0/me/permissions`, {
+        const permRes = await axios.get(`${GRAPH_API_BASE}/me/permissions`, {
           params: { access_token: accessToken },
         });
         const permissionsData: { permission: string; status: string }[] = permRes.data?.data || [];
@@ -454,12 +455,42 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       const { pages, instagramAccounts } = await this.fetchAllMetaPagesAndInstagramAccounts(accessToken);
       const adAccounts = await this.fetchAllMetaAdAccounts(accessToken);
 
+      // These used to fall back to hardcoded demo IDs ('page_987654321',
+      // 'ig_554433221', 'act_10158291038471') when the Graph API returned
+      // nothing. A connection that found no Page still reported success and
+      // wrote unusable IDs to Firestore, so the UI showed "Connected" while
+      // every later publish, lead fetch and campaign call silently targeted
+      // objects that do not exist. Fail here, where the cause is obvious.
       const firstPage = pages[0];
-      const metaPageId = firstPage?.id || 'page_987654321';
-      const metaPageName = firstPage?.name || 'Love for Pure Facebook Page';
-      const metaPageAccessToken = firstPage?.accessToken || accessToken;
-      const metaIgBusinessAccountId = instagramAccounts[0]?.id || firstPage?.instagram_business_account?.id || 'ig_554433221';
-      const metaAdAccountId = adAccounts[0]?.id || 'act_10158291038471';
+      if (!firstPage?.id) {
+        throw new HttpException(
+          'Signed in to Meta, but no Facebook Page came back for this account. ' +
+            'Check that you granted Page access during login and that your Facebook account manages at least one Page, then reconnect.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const metaPageId = firstPage.id;
+      const metaPageName = firstPage.name || 'Untitled Page';
+      const metaPageAccessToken = firstPage.accessToken || accessToken;
+
+      // Instagram and ad accounts are genuinely optional at connect time — a
+      // business may not have linked one yet. Store null rather than a fake id
+      // so the features that need them can report the real reason.
+      const metaIgBusinessAccountId =
+        instagramAccounts[0]?.id || firstPage.instagram_business_account?.id || null;
+      const metaAdAccountId = adAccounts[0]?.id || null;
+
+      if (!metaIgBusinessAccountId) {
+        this.logger.warn(
+          `[Meta Connect] No Instagram business account linked for business ${businessId}. Instagram publishing will be unavailable until one is connected to the Page.`,
+        );
+      }
+      if (!metaAdAccountId) {
+        this.logger.warn(
+          `[Meta Connect] No ad account returned for business ${businessId}. Paid campaign features will be unavailable until an ad account is granted to this app.`,
+        );
+      }
 
       // Save everything to Firestore
       await this.firebase.updateBusiness(businessId, {
@@ -579,7 +610,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
     try {
       const res = await axios.get(
-        `https://graph.facebook.com/v19.0/me/accounts`,
+        `${GRAPH_API_BASE}/me/accounts`,
         {
           params: {
             access_token: business.metaAccessToken,
@@ -623,7 +654,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
     // 1. Fetch personally owned ad accounts
     try {
-      const res = await axios.get(`https://graph.facebook.com/v19.0/me/adaccounts`, {
+      const res = await axios.get(`${GRAPH_API_BASE}/me/adaccounts`, {
         params: { access_token: accessToken, fields },
       });
       const data = res.data?.data || [];
@@ -635,7 +666,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     // 2. Fetch businesses
     let businesses: any[] = [];
     try {
-      const res = await axios.get(`https://graph.facebook.com/v19.0/me/businesses`, {
+      const res = await axios.get(`${GRAPH_API_BASE}/me/businesses`, {
         params: { access_token: accessToken, fields: 'id,name' },
       });
       businesses = res.data?.data || [];
@@ -646,13 +677,13 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     // 3. Fetch ad accounts for each business
     for (const biz of businesses) {
       try {
-        const ownedRes = await axios.get(`https://graph.facebook.com/v19.0/${biz.id}/owned_ad_accounts`, {
+        const ownedRes = await axios.get(`${GRAPH_API_BASE}/${biz.id}/owned_ad_accounts`, {
           params: { access_token: accessToken, fields },
         });
         const owned = ownedRes.data?.data || [];
         for (const acc of owned) accountsMap.set(acc.id, acc);
 
-        const clientRes = await axios.get(`https://graph.facebook.com/v19.0/${biz.id}/client_ad_accounts`, {
+        const clientRes = await axios.get(`${GRAPH_API_BASE}/${biz.id}/client_ad_accounts`, {
           params: { access_token: accessToken, fields },
         });
         const client = clientRes.data?.data || [];
@@ -664,10 +695,11 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
     const accountsList = Array.from(accountsMap.values());
     if (accountsList.length === 0) {
-      this.logger.warn('[Meta Fallback Mode] Permission restriction or empty Meta API response. Injecting Primary Ad Account test asset.');
-      return [
-        { id: 'act_122106351009402042', name: 'Primary Ad Account (Active)', currency: 'INR', account_status: 1, isMockFallback: true },
-      ];
+      // An empty list is a real answer: the user has granted no ad account, or
+      // ads_management was not approved. Injecting a fabricated account here
+      // put an ad account the user does not own into the picker, and selecting
+      // it wrote that fake id into their record permanently.
+      this.logger.warn('[Meta] No ad accounts returned. The user may not have granted ads_management, or owns no ad account.');
     }
 
     return accountsList;
@@ -684,17 +716,22 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     }
 
     if (!business.metaAccessToken) {
-      return [
-        { id: 'act_122106351009402042', name: 'Primary Ad Account (Active)', currency: 'INR', account_status: 1, isMockFallback: true },
-      ];
+      throw new HttpException(
+        'Meta is not connected for this workspace. Connect a Meta account first.',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     try {
       return await this.fetchAllMetaAdAccounts(business.metaAccessToken);
-    } catch {
-      return [
-        { id: 'act_122106351009402042', name: 'Primary Ad Account (Active)', currency: 'INR', account_status: 1, isMockFallback: true },
-      ];
+    } catch (err: any) {
+      // Previously returned a fabricated ad account here, so a permissions or
+      // network failure looked like a successful list. Surface the real error.
+      this.logger.error(`[Meta] Failed to list ad accounts for ${businessId}: ${describeMetaError(err)}`);
+      throw new HttpException(
+        `Could not load your Meta ad accounts: ${describeMetaError(err)}`,
+        HttpStatus.BAD_GATEWAY,
+      );
     }
   }
 
@@ -712,7 +749,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
     // 1. Fetch personal pages (/me/accounts)
     try {
-      const res = await axios.get(`https://graph.facebook.com/v19.0/me/accounts`, {
+      const res = await axios.get(`${GRAPH_API_BASE}/me/accounts`, {
         params: { access_token: accessToken, fields },
       });
       const data = res.data?.data || [];
@@ -724,7 +761,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     // 2. Fetch businesses (/me/businesses)
     let businesses: any[] = [];
     try {
-      const res = await axios.get(`https://graph.facebook.com/v19.0/me/businesses`, {
+      const res = await axios.get(`${GRAPH_API_BASE}/me/businesses`, {
         params: { access_token: accessToken, fields: 'id,name' },
       });
       businesses = res.data?.data || [];
@@ -735,7 +772,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     // 3. Fetch owned_pages, client_pages, and instagram_accounts for each business portfolio
     for (const biz of businesses) {
       try {
-        const ownedRes = await axios.get(`https://graph.facebook.com/v19.0/${biz.id}/owned_pages`, {
+        const ownedRes = await axios.get(`${GRAPH_API_BASE}/${biz.id}/owned_pages`, {
           params: { access_token: accessToken, fields },
         });
         const owned = ownedRes.data?.data || [];
@@ -745,7 +782,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       }
 
       try {
-        const clientRes = await axios.get(`https://graph.facebook.com/v19.0/${biz.id}/client_pages`, {
+        const clientRes = await axios.get(`${GRAPH_API_BASE}/${biz.id}/client_pages`, {
           params: { access_token: accessToken, fields },
         });
         const client = clientRes.data?.data || [];
@@ -755,7 +792,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       }
 
       try {
-        const igRes = await axios.get(`https://graph.facebook.com/v19.0/${biz.id}/instagram_accounts`, {
+        const igRes = await axios.get(`${GRAPH_API_BASE}/${biz.id}/instagram_accounts`, {
           params: { access_token: accessToken, fields: 'id,username,name,profile_picture_url' },
         });
         const bizIgs = igRes.data?.data || [];
@@ -780,7 +817,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       if (!ig) {
         try {
           const pageToken = p.access_token || accessToken;
-          const directRes = await axios.get(`https://graph.facebook.com/v19.0/${p.id}`, {
+          const directRes = await axios.get(`${GRAPH_API_BASE}/${p.id}`, {
             params: {
               access_token: pageToken,
               fields: 'instagram_business_account{id,username,name,profile_picture_url},connected_instagram_account{id,username,name}',
@@ -817,18 +854,14 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       isMockFallback: !!i.isMockFallback,
     }));
 
+    // Empty lists are returned as-is. Injecting a fake Page or IG profile here
+    // meant a user with no granted Page still saw one to pick, and publishing
+    // then targeted an object that does not exist.
     if (pages.length === 0) {
-      this.logger.warn('[Meta Fallback Mode] Permission restriction or empty Meta API response. Injecting Brand Facebook Page test asset.');
-      pages = [
-        { id: 'page_1009827341', name: 'Brand Facebook Page', accessToken: 'mock_token', category: 'Brand', isMockFallback: true }
-      ];
+      this.logger.warn('[Meta] No Pages returned — the user may not have granted pages_show_list, or manages no Page.');
     }
-
     if (instagramAccounts.length === 0) {
-      this.logger.warn('[Meta Fallback Mode] Permission restriction or empty Meta API response. Injecting brand_official IG profile test asset.');
-      instagramAccounts = [
-        { id: 'ig_7766554433', username: 'brand_official', name: 'Brand Official', pageId: 'page_1009827341', isMockFallback: true }
-      ];
+      this.logger.warn('[Meta] No Instagram business accounts returned — none linked to the connected Page(s).');
     }
 
     return { pages, instagramAccounts };
@@ -838,7 +871,8 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     const business = await this.firebase.getBusinessById(businessId);
     if (!business) throw new HttpException('Business not found', HttpStatus.NOT_FOUND);
 
-    const fallbackResult = {
+    // Local mock-mode only. Never served on a live connection.
+    const mockChannels = {
       isMockFallback: true,
       adAccounts: [
         { id: 'act_122106351009402042', name: 'Primary Ad Account (Active)', currency: 'INR', account_status: 1, isMockFallback: true },
@@ -852,12 +886,13 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     };
 
     if (this.isMock) {
-      return fallbackResult;
+      return mockChannels;
     }
 
     if (!business.metaAccessToken) {
-      this.logger.warn(`[Meta Fallback Bridge] Business ${businessId} has no Meta access token. Serving active fallback business assets.`);
-      return fallbackResult;
+      // Serving the demo bundle here told the UI a disconnected workspace had
+      // live Meta assets. Report the real state instead.
+      return { isMockFallback: false, connected: false, adAccounts: [], pages: [], instagramAccounts: [] };
     }
 
     const accessToken = business.metaAccessToken;
@@ -880,9 +915,15 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
         instagramAccounts = channelsResult.value.instagramAccounts || [];
       }
 
-      if (adAccounts.length === 0) adAccounts = fallbackResult.adAccounts;
-      if (pages.length === 0) pages = fallbackResult.pages;
-      if (instagramAccounts.length === 0) instagramAccounts = fallbackResult.instagramAccounts;
+      // Empty lists are reported honestly. Substituting the demo bundle here
+      // showed a user assets they do not own; selecting one wrote a fabricated
+      // id into their record and every later Meta call targeted nothing.
+      if (adAccountsResult.status === 'rejected') {
+        this.logger.error(`[Meta] Ad account fetch failed for ${businessId}: ${describeMetaError(adAccountsResult.reason)}`);
+      }
+      if (channelsResult.status === 'rejected') {
+        this.logger.error(`[Meta] Page/Instagram fetch failed for ${businessId}: ${describeMetaError(channelsResult.reason)}`);
+      }
 
       const isMockFallback = adAccounts.some(a => a.isMockFallback) || pages.some(p => p.isMockFallback) || instagramAccounts.some(i => i.isMockFallback);
 
@@ -895,10 +936,11 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
           account_status: a.account_status || 1,
           isMockFallback: !!a.isMockFallback,
         })),
+        // No access token in the response — the browser never needs it, and
+        // shipping one puts a live credential into client memory and logs.
         pages: pages.map(p => ({
           id: p.id,
           name: p.name || 'Facebook Page',
-          accessToken: p.accessToken || accessToken,
           category: p.category || '',
           isMockFallback: !!p.isMockFallback,
         })),
@@ -911,8 +953,13 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
         })),
       };
     } catch (err: any) {
-      this.logger.warn('[Meta Fallback Bridge] Error fetching Meta channels: ' + (err.response?.data?.error?.message || err.message) + '. Serving active fallback business assets.');
-      return fallbackResult;
+      // Was returning the demo bundle, so an outage looked like a healthy
+      // account list. Fail loudly instead.
+      this.logger.error(`[Meta] Error fetching channels for ${businessId}: ${describeMetaError(err)}`);
+      throw new HttpException(
+        `Could not load your Meta accounts: ${describeMetaError(err)}`,
+        HttpStatus.BAD_GATEWAY,
+      );
     }
   }
 
@@ -1005,7 +1052,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     try {
       // Step 1: POST /{ig_user_id}/media (Container Upload)
       const containerRes = await axios.post(
-        `https://graph.facebook.com/v19.0/${igAccountId}/media`,
+        `${GRAPH_API_BASE}/${igAccountId}/media`,
         null,
         {
           params: {
@@ -1025,7 +1072,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
       // Step 2: POST /{ig_user_id}/media_publish (Container Publish)
       const publishRes = await axios.post(
-        `https://graph.facebook.com/v19.0/${igAccountId}/media_publish`,
+        `${GRAPH_API_BASE}/${igAccountId}/media_publish`,
         null,
         {
           params: {
@@ -1091,8 +1138,8 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
     try {
       const endpoint = imageUrl
-        ? `https://graph.facebook.com/v19.0/${pageId}/photos`
-        : `https://graph.facebook.com/v19.0/${pageId}/feed`;
+        ? `${GRAPH_API_BASE}/${pageId}/photos`
+        : `${GRAPH_API_BASE}/${pageId}/feed`;
 
       const params: any = { access_token: accessToken, message: caption };
       if (imageUrl) params.url = imageUrl;
@@ -1120,7 +1167,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
     try {
       const res = await axios.get(
-        `https://graph.facebook.com/v19.0/${pageId}`,
+        `${GRAPH_API_BASE}/${pageId}`,
         {
           params: {
             access_token: business.metaAccessToken,
@@ -1147,7 +1194,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       instagramAccountName?: string;
     },
   ) {
-    await this.firebase.updateBusiness(businessId, {
+    const selection = {
       selectedAdAccountId: data.adAccountId,
       metaAdAccountId: data.adAccountId,
       selectedAdAccountName: data.adAccountName,
@@ -1157,7 +1204,30 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       selectedInstagramAccountId: data.instagramAccountId || null,
       selectedInstagramAccountName: data.instagramAccountName || null,
       metaIgBusinessAccountId: data.instagramAccountId || null,
-    });
+    };
+
+    await this.firebase.updateBusiness(businessId, selection);
+
+    // Meta credentials live in BOTH `businesses` and `workspaces`, and every
+    // publish path reads `workspaces` first. Writing the selection only to
+    // `businesses` meant changing your Page silently did nothing — posts kept
+    // going to whichever Page was auto-picked at connect time, forever.
+    // Keep the two in step.
+    if (this.firebase.workspacesDao) {
+      try {
+        await this.firebase.workspacesDao.update(businessId, selection as any);
+      } catch (err: any) {
+        this.logger.error(
+          `[Meta] Selection saved to business ${businessId} but the workspace copy failed: ${err.message}. ` +
+            'Publishing would keep using the previous Page — failing the request so the user can retry.',
+        );
+        throw new HttpException(
+          'Could not save your account selection. Please try again.',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+    }
+
     return { success: true, message: 'Meta accounts configured successfully' };
   }
 
@@ -1241,7 +1311,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
         // 1. Create Campaign
         this.logger.log(`Creating campaign: ${campaignName} with objective ${metaObjective}`);
         const campaignRes = await axios.post(
-          `https://graph.facebook.com/v19.0/${adAccountId}/campaigns`,
+          `${GRAPH_API_BASE}/${adAccountId}/campaigns`,
           {
             name: campaignName,
             objective: metaObjective,
@@ -1282,7 +1352,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
         this.logger.log(`Creating ad set for campaign ${metaCampaignId}`);
         const adSetRes = await axios.post(
-          `https://graph.facebook.com/v19.0/${adAccountId}/adsets`,
+          `${GRAPH_API_BASE}/${adAccountId}/adsets`,
           adSetPayload,
           { params: { access_token: accessToken } },
         );
@@ -1313,7 +1383,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
         this.logger.log(`Creating ad creative for ad set ${metaAdSetId}`);
         const creativeRes = await axios.post(
-          `https://graph.facebook.com/v19.0/${adAccountId}/adcreatives`,
+          `${GRAPH_API_BASE}/${adAccountId}/adcreatives`,
           creativePayload,
           { params: { access_token: accessToken } },
         );
@@ -1323,7 +1393,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
         // 4. Create Ad
         this.logger.log(`Creating ad for ad set ${metaAdSetId} with creative ${metaCreativeId}`);
         const adRes = await axios.post(
-          `https://graph.facebook.com/v19.0/${adAccountId}/ads`,
+          `${GRAPH_API_BASE}/${adAccountId}/ads`,
           {
             name: `${campaignName} - Ad`,
             adset_id: metaAdSetId,
@@ -1450,7 +1520,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
     try {
       const res = await axios.get(
-        `https://graph.facebook.com/v19.0/me/businesses`,
+        `${GRAPH_API_BASE}/me/businesses`,
         { params: { access_token: business.metaAccessToken } },
       );
       return res.data.data || [];
@@ -1484,7 +1554,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
     try {
       const res = await axios.get(
-        `https://graph.facebook.com/v19.0/${adAccountId}/campaigns`,
+        `${GRAPH_API_BASE}/${adAccountId}/campaigns`,
         {
           params: {
             access_token: business.metaAccessToken,
@@ -1545,7 +1615,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       const effectivePreset = datePreset || 'last_30d';
 
       const res = await axios.get(
-        `https://graph.facebook.com/v19.0${insightLevel}/insights`,
+        `${GRAPH_API_BASE}${insightLevel}/insights`,
         {
           params: {
             access_token: metaAccessToken,
@@ -1614,7 +1684,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
     try {
       const res = await axios.get(
-        `https://graph.facebook.com/v19.0/${pageId}/leadgen_forms`,
+        `${GRAPH_API_BASE}/${pageId}/leadgen_forms`,
         {
           params: {
             access_token: business.metaAccessToken,
@@ -1651,7 +1721,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
     try {
       const formsRes = await axios.get(
-        `https://graph.facebook.com/v19.0/${pageId}/leadgen_forms`,
+        `${GRAPH_API_BASE}/${pageId}/leadgen_forms`,
         {
           params: {
             access_token: business.metaAccessToken,
@@ -1667,7 +1737,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       for (const form of forms) {
         try {
           const leadsRes = await axios.get(
-            `https://graph.facebook.com/v19.0/${form.id}/leads`,
+            `${GRAPH_API_BASE}/${form.id}/leads`,
             {
               params: {
                 access_token: business.metaAccessToken,
@@ -1711,7 +1781,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
         }
 
         const res = await axios.post(
-          `https://graph.facebook.com/v19.0/${pageId}/leadgen_forms`,
+          `${GRAPH_API_BASE}/${pageId}/leadgen_forms`,
           {
             name: formName,
             questions: questions.map(q => ({
@@ -1748,9 +1818,11 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
         const leadgenId = leadgenData.leadgen_id;
         const pageId = leadgenData.page_id;
 
-        // 1. Find business by pageId using a proper Firestore query
-        const businesses = await this.firebase.getAllBusinesses();
-        const matchedBusiness = businesses.find((b: any) => b.metaPageId === pageId);
+        // 1. Find the business by pageId with an indexed query. Loading every
+        // business and scanning in JS both cost a read per business and, once
+        // the listing is bounded, silently dropped leads for any business
+        // outside the fetched window.
+        const matchedBusiness = await this.firebase.getBusinessByMetaPageId(pageId);
 
         if (!matchedBusiness) {
           this.logger.warn(`Received lead for unknown page ID: ${pageId}`);
@@ -1777,7 +1849,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
           let fieldData = Array.isArray(leadgenData.field_data) ? leadgenData.field_data : [];
           if (!this.isMock && accessToken) {
             const leadRes = await axios.get(
-              `https://graph.facebook.com/v19.0/${leadgenId}`,
+              `${GRAPH_API_BASE}/${leadgenId}`,
               { params: { access_token: accessToken } }
             );
 
@@ -1835,7 +1907,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
         if (accessToken) {
           const insightsRes = await axios.get(
-            `https://graph.facebook.com/v19.0/${metaCampaignId}/insights`,
+            `${GRAPH_API_BASE}/${metaCampaignId}/insights`,
             {
               params: {
                 access_token: accessToken,
@@ -1953,7 +2025,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       const cleanAdAccountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
       // Main insights
       const insightsRes = await axios.get(
-        `https://graph.facebook.com/v19.0/${cleanAdAccountId}/insights`,
+        `${GRAPH_API_BASE}/${cleanAdAccountId}/insights`,
         {
           params: {
             access_token: metaAccessToken,
@@ -1986,7 +2058,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
       try {
         const demoRes = await axios.get(
-          `https://graph.facebook.com/v19.0/${cleanAdAccountId}/insights`,
+          `${GRAPH_API_BASE}/${cleanAdAccountId}/insights`,
           {
             params: {
               access_token: metaAccessToken,
@@ -2024,7 +2096,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       // Attempt to query live Facebook Page & IG Insights
       try {
         const pagesRes = await axios.get(
-          `https://graph.facebook.com/v19.0/me/accounts`,
+          `${GRAPH_API_BASE}/me/accounts`,
           { params: { access_token: metaAccessToken } }
         );
         const pages = pagesRes.data.data || [];
@@ -2033,7 +2105,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
           const pageToken = pages[0].access_token || metaAccessToken;
           
           const pageInsightsRes = await axios.get(
-            `https://graph.facebook.com/v19.0/${pageId}/insights`,
+            `${GRAPH_API_BASE}/${pageId}/insights`,
             {
               params: {
                 access_token: pageToken,

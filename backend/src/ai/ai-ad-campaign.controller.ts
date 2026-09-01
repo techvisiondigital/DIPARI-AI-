@@ -1,6 +1,9 @@
-import { Controller, Post, Body, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, HttpException, HttpStatus, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { BusinessAccessGuard } from '../auth/business-access.guard';
 import { AiAdCampaignService, GenerateAdCampaignDto, GenerateContentDto } from './ai-ad-campaign.service';
 
+@UseGuards(JwtAuthGuard, BusinessAccessGuard)
 @Controller('api/ai')
 export class ApiAiAdCampaignController {
   constructor(private readonly aiAdCampaignService: AiAdCampaignService) {}
@@ -35,6 +38,7 @@ export class ApiAiAdCampaignController {
   }
 }
 
+@UseGuards(JwtAuthGuard, BusinessAccessGuard)
 @Controller('ai')
 export class AiAdCampaignController {
   constructor(private readonly aiAdCampaignService: AiAdCampaignService) {}

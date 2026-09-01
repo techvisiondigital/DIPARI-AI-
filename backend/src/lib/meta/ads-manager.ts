@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { GRAPH_API_BASE } from './graph-version';
 
 export interface MetaCampaignLaunchInput {
   adAccountId: string;
@@ -41,12 +42,19 @@ export interface MetaCampaignLaunchResult {
  */
 export function formatAdAccountId(adAccountId: string): string {
   const clean = (adAccountId || '').trim();
-  if (!clean) return 'act_mock_account';
+  if (!clean) {
+    // Returned 'act_mock_account' here, so a missing ad account produced a
+    // campaign request aimed at a nonexistent account and a confusing Meta
+    // error much further downstream.
+    throw new Error(
+      'No Meta ad account is selected for this workspace. Connect Meta and choose an ad account first.',
+    );
+  }
   return clean.startsWith('act_') ? clean : `act_${clean}`;
 }
 
 /**
- * Maps campaign objective string to official Meta Graph API v19.0 objectives.
+ * Maps campaign objective string to official Meta Graph API objectives.
  */
 export function mapMetaObjective(objective?: string): string {
   const obj = (objective || '').toUpperCase();
@@ -60,7 +68,7 @@ export function mapMetaObjective(objective?: string): string {
 
 /**
  * Uploads an ad image to Meta Ad Account images endpoint to get image_hash.
- * POST https://graph.facebook.com/v19.0/act_<AD_ACCOUNT_ID>/adimages
+ * POST https://graph.facebook.com/<version>/act_<AD_ACCOUNT_ID>/adimages
  */
 export async function uploadAdImageToMeta(
   adAccountId: string,
@@ -81,7 +89,7 @@ export async function uploadAdImageToMeta(
     const base64Image = imageBuffer.toString('base64');
 
     const response = await axios.post(
-      `https://graph.facebook.com/v19.0/${formattedAdAcc}/adimages`,
+      `${GRAPH_API_BASE}/${formattedAdAcc}/adimages`,
       {
         bytes: base64Image,
       },
@@ -100,8 +108,12 @@ export async function uploadAdImageToMeta(
 
     return imageHash;
   } catch (err: any) {
-    // Return mock hash fallback if upload fails so campaign creation is resilient
-    return 'mock_image_hash_fallback_' + Date.now();
+    // Previously invented 'mock_image_hash_fallback_<ts>' so the launch could
+    // continue. Meta always rejects a hash it never issued, so the ad creative
+    // failed anyway — but by then a real Campaign and Ad Set had been created
+    // on the customer's live ad account with nothing to clean them up.
+    // Fail here, before anything is created.
+    throw new Error(`Could not upload the ad image to Meta: ${describeMetaError(err)}`);
   }
 }
 
@@ -124,7 +136,7 @@ export async function resolveAdInterestIds(
     if (!name) continue;
 
     try {
-      const res = await axios.get('https://graph.facebook.com/v19.0/search', {
+      const res = await axios.get(`${GRAPH_API_BASE}/search`, {
         params: { type: 'adinterest', q: name, limit: 1, access_token: accessToken },
         timeout: 15_000,
       });
@@ -161,7 +173,8 @@ export function describeMetaError(err: any): string {
 
 /**
  * Executes full 4-Step Meta Campaign Hierarchy Creation:
- * Step A (Campaign) -> Step B (Ad Set) -> Step C (Image Hash & Ad Creative) -> Step D (Ad)
+ * Step 0 (Image upload) -> Step A (Campaign) -> Step B (Ad Set)
+ * -> Step C (Ad Creative) -> Step D (Ad)
  */
 export async function launchFullMetaCampaignHierarchy(
   input: MetaCampaignLaunchInput,
@@ -200,10 +213,23 @@ export async function launchFullMetaCampaignHierarchy(
 
   const metaObjective = mapMetaObjective(objective);
 
+  // Step 0: Upload the creative image FIRST.
+  // This used to run as part of Step C, after the Campaign and Ad Set were
+  // already live on the customer's ad account. A failed upload then aborted
+  // the launch and left both objects stranded with nothing to clean them up.
+  // Uploading first means a failure costs nothing.
+  // Empty when there is no creative image. It used to default to a literal
+  // 'mock_image_hash_...', which was then sent to Meta as a real image_hash
+  // and rejected — after the Campaign and Ad Set had already been created.
+  let imageHash = '';
+  if (imageUrl) {
+    imageHash = await uploadAdImageToMeta(adAccountId, accessToken, imageUrl, isMock);
+  }
+
   // Step A: Create Campaign
-  // POST https://graph.facebook.com/v19.0/act_<AD_ACCOUNT_ID>/campaigns
+  // POST https://graph.facebook.com/<version>/act_<AD_ACCOUNT_ID>/campaigns
   const campaignRes = await axios.post(
-    `https://graph.facebook.com/v19.0/${formattedAdAccountId}/campaigns`,
+    `${GRAPH_API_BASE}/${formattedAdAccountId}/campaigns`,
     {
       name: campaignName,
       objective: metaObjective,
@@ -215,7 +241,7 @@ export async function launchFullMetaCampaignHierarchy(
   const metaCampaignId = campaignRes.data.id;
 
   // Step B: Create Ad Set (15-Day Schedule)
-  // POST https://graph.facebook.com/v19.0/act_<AD_ACCOUNT_ID>/adsets
+  // POST https://graph.facebook.com/<version>/act_<AD_ACCOUNT_ID>/adsets
   const budgetInCents = Math.round((dailyBudget || 100) * 100);
   const now = new Date();
   const fifteenDaysLater = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000);
@@ -261,20 +287,14 @@ export async function launchFullMetaCampaignHierarchy(
   }
 
   const adSetRes = await axios.post(
-    `https://graph.facebook.com/v19.0/${formattedAdAccountId}/adsets`,
+    `${GRAPH_API_BASE}/${formattedAdAccountId}/adsets`,
     adSetPayload,
     { params: { access_token: accessToken } },
   );
   const metaAdSetId = adSetRes.data.id;
 
-  // Step C: Upload Ad Image & Create Ad Creative
-  // Upload Image to get image_hash
-  let imageHash = 'mock_image_hash_9f8e7d6c5b4a';
-  if (imageUrl) {
-    imageHash = await uploadAdImageToMeta(adAccountId, accessToken, imageUrl, isMock);
-  }
-
-  // POST https://graph.facebook.com/v19.0/act_<AD_ACCOUNT_ID>/adcreatives
+  // Step C: Create Ad Creative (image already uploaded in Step 0)
+  // POST https://graph.facebook.com/<version>/act_<AD_ACCOUNT_ID>/adcreatives
   const creativePayload: any = {
     name: `${campaignName} - Creative`,
     object_story_spec: {
@@ -284,7 +304,9 @@ export async function launchFullMetaCampaignHierarchy(
         message: primaryText,
         name: headline,
         description: description || '',
-        image_hash: imageHash,
+        // Meta rejects an empty image_hash, so omit the field entirely when
+        // there is no creative image rather than sending a blank value.
+        ...(imageHash ? { image_hash: imageHash } : {}),
         call_to_action: {
           type: ctaType || 'LEARN_MORE',
         },
@@ -293,16 +315,16 @@ export async function launchFullMetaCampaignHierarchy(
   };
 
   const creativeRes = await axios.post(
-    `https://graph.facebook.com/v19.0/${formattedAdAccountId}/adcreatives`,
+    `${GRAPH_API_BASE}/${formattedAdAccountId}/adcreatives`,
     creativePayload,
     { params: { access_token: accessToken } },
   );
   const metaCreativeId = creativeRes.data.id;
 
   // Step D: Create Ad
-  // POST https://graph.facebook.com/v19.0/act_<AD_ACCOUNT_ID>/ads
+  // POST https://graph.facebook.com/<version>/act_<AD_ACCOUNT_ID>/ads
   const adRes = await axios.post(
-    `https://graph.facebook.com/v19.0/${formattedAdAccountId}/ads`,
+    `${GRAPH_API_BASE}/${formattedAdAccountId}/ads`,
     {
       name: `${campaignName} - Ad`,
       adset_id: metaAdSetId,

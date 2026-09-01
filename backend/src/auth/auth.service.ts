@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { FirebaseService } from '../firebase/firebase.service';
 import * as admin from 'firebase-admin';
 import axios from 'axios';
+import { timingSafeEqual } from 'crypto';
 
 /**
  * AuthService — migrated to Firebase Authentication.
@@ -159,30 +160,70 @@ export class AuthService {
     }
   }
 
+  /**
+   * Admin portal sign-in.
+   *
+   * SECURITY: this method previously returned a full ADMIN token for the
+   * literal emails 'admin', 'admin@campaignai.com' and 'admin@campaign.ai'
+   * WITHOUT EVER CHECKING THE PASSWORD — the `password` argument was accepted
+   * and ignored. A single unauthenticated request granted complete control of
+   * every business, user, lead and payment record on the platform.
+   *
+   * Credentials are now always verified. A bootstrap admin is still possible
+   * for environments that have no ADMIN user yet, but only when BOTH
+   * ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD are configured, and the
+   * supplied password matches. Absent those, the only way in is a real account
+   * whose role is ADMIN.
+   */
   async adminLogin(email: string, password?: string) {
     const cleanEmail = (email || '').toLowerCase().trim();
-    if (cleanEmail === 'admin' || cleanEmail === 'admin@campaignai.com' || cleanEmail === 'admin@campaign.ai') {
-      let adminUser = await this.firebase.getUserById('admin-user-id').catch(() => null);
-      if (!adminUser) {
-        adminUser = {
-          id: 'admin-user-id',
-          email: 'admin@campaignai.com',
-          name: 'System Administrator',
-          role: 'ADMIN',
-        } as any;
+
+    const bootstrapEmail = (process.env.ADMIN_BOOTSTRAP_EMAIL || '').toLowerCase().trim();
+    const bootstrapPassword = process.env.ADMIN_BOOTSTRAP_PASSWORD || '';
+
+    if (bootstrapEmail && bootstrapPassword && cleanEmail === bootstrapEmail) {
+      if (!password || !this.safeEquals(password, bootstrapPassword)) {
+        this.logger.warn(`[AuthService] Failed bootstrap admin login attempt for ${cleanEmail}`);
+        throw new UnauthorizedException('Invalid credentials');
       }
+
+      const adminUser = (await this.firebase.getUserById('admin-user-id').catch(() => null)) || {
+        id: 'admin-user-id',
+        email: bootstrapEmail,
+        name: 'System Administrator',
+        role: 'ADMIN',
+      } as any;
+
       const businesses = await this.firebase.getBusinessesByUserId(adminUser.id).catch(() => []);
       const business = businesses && businesses.length > 0 ? businesses[0] : null;
+
+      this.logger.log(`[AuthService] Bootstrap admin signed in: ${cleanEmail}`);
       return {
-        user: { id: adminUser.id, email: adminUser.email || 'admin@campaignai.com', name: adminUser.name || 'System Administrator', role: 'ADMIN', businessId: business?.id || 'admin-biz-1' },
-        token: await this.generateToken(adminUser.id, adminUser.email || 'admin@campaignai.com', 'ADMIN'),
+        user: {
+          id: adminUser.id,
+          email: adminUser.email || bootstrapEmail,
+          name: adminUser.name || 'System Administrator',
+          role: 'ADMIN',
+          businessId: business?.id || 'admin-biz-1',
+        },
+        token: await this.generateToken(adminUser.id, adminUser.email || bootstrapEmail, 'ADMIN'),
       };
     }
+
     const result = await this.login(email, password);
     if (result.user?.role !== 'ADMIN') {
+      this.logger.warn(`[AuthService] Non-admin account attempted admin portal access: ${cleanEmail}`);
       throw new ForbiddenException('Access Denied: Only Administrator accounts can access the Admin Portal.');
     }
     return result;
+  }
+
+  /** Length-safe, constant-time string comparison to avoid leaking the secret via timing. */
+  private safeEquals(a: string, b: string): boolean {
+    const bufA = Buffer.from(a, 'utf8');
+    const bufB = Buffer.from(b, 'utf8');
+    if (bufA.length !== bufB.length) return false;
+    return timingSafeEqual(bufA, bufB);
   }
 
   async checkOnboardingCompleted(businessId: string): Promise<boolean> {

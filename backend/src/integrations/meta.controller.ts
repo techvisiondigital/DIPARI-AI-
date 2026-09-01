@@ -1,9 +1,20 @@
-import { Controller, Get, Post, Delete, Body, Query, HttpException, HttpStatus, Res, Header } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Query, HttpException, HttpStatus, Res, Header, Logger, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { IntegrationsService } from './integrations.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { BusinessAccessGuard } from '../auth/business-access.guard';
 
+/**
+ * Endpoints Meta itself calls, which therefore cannot carry a user token:
+ * the browser OAuth redirect and the lead webhook. They live in their own
+ * controller so that the guards on MetaController below apply to everything
+ * else by default — a route added there is authenticated unless someone
+ * deliberately moves it here.
+ */
 @Controller('meta')
-export class MetaController {
+export class MetaPublicController {
+  private readonly logger = new Logger(MetaPublicController.name);
+
   constructor(private readonly integrationsService: IntegrationsService) {}
 
   @Get('auth-url')
@@ -28,15 +39,36 @@ export class MetaController {
     @Query('code') code: string,
     @Query('state') state: string,
     @Query('error') error: string,
+    @Query('error_code') errorCode: string,
+    @Query('error_message') errorMessage: string,
+    @Query('error_reason') errorReason: string,
+    @Query('error_description') errorDescription: string,
     @Res() res: Response,
   ) {
     const frontendBase = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
-    if (error) {
-      return res.redirect(`${frontendBase}/connect-meta?error=${encodeURIComponent(error)}`);
+
+    // Facebook does not always send `error`. A rejected permission request
+    // arrives as error_code + error_message (e.g. "Invalid Scopes: ...") with
+    // no `error` at all, which previously fell through to the generic
+    // "missing_params" branch and hid the actual reason.
+    const failure = [errorMessage, errorDescription, errorReason, error]
+      .map((v) => (v || '').trim())
+      .find(Boolean);
+
+    if (failure || errorCode) {
+      const detail = failure || `Meta returned error code ${errorCode}`;
+      this.logger.error(
+        `[Meta OAuth callback] code=${errorCode || 'n/a'} reason=${errorReason || 'n/a'} message=${detail}`,
+      );
+      return res.redirect(`${frontendBase}/connect-meta?error=${encodeURIComponent(detail)}`);
     }
 
     if (!code || !state) {
-      return res.redirect(`${frontendBase}/connect-meta?error=missing_params`);
+      return res.redirect(
+        `${frontendBase}/connect-meta?error=${encodeURIComponent(
+          'Meta redirected back without an authorization code. Please start the connection again.',
+        )}`,
+      );
     }
 
     try {
@@ -60,6 +92,54 @@ export class MetaController {
       return res.redirect(`${frontendBase}/connect-meta?error=${encodeURIComponent(err.message || 'OAuth exchange failed')}`);
     }
   }
+
+  // ─── Webhooks (called by Meta's servers, no user token) ──────────────────────
+
+  @Get('webhooks/leads')
+  @Header('Content-Type', 'text/plain')
+  verifyWebhook(
+    @Query('hub.mode') mode: string,
+    @Query('hub.verify_token') token: string,
+    @Query('hub.challenge') challenge: string,
+  ) {
+    const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN;
+    if (!VERIFY_TOKEN) {
+      // No hardcoded fallback: an attacker who read the repo could otherwise
+      // register themselves as this app's webhook and inject fabricated leads.
+      this.logger.error('META_WEBHOOK_VERIFY_TOKEN is not set — refusing webhook verification.');
+      throw new HttpException('Webhook not configured', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+      return challenge;
+    }
+    throw new HttpException('Forbidden', HttpStatus.FORBIDDEN);
+  }
+
+  @Post('webhooks/leads')
+  async handleWebhook(@Body() body: any) {
+    if (body.object === 'page') {
+      for (const entry of body.entry || []) {
+        await this.integrationsService.processLeadWebhook(entry);
+      }
+      return 'EVENT_RECEIVED';
+    }
+    throw new HttpException('Not Found', HttpStatus.NOT_FOUND);
+  }
+}
+
+/**
+ * Everything a signed-in user does with their own Meta connection.
+ *
+ * JwtAuthGuard proves who the caller is; BusinessAccessGuard proves the
+ * businessId in the query or body actually belongs to them. Without the
+ * second guard, any authenticated user could pass another business's id and
+ * read their leads or spend their ad budget.
+ */
+@UseGuards(JwtAuthGuard, BusinessAccessGuard)
+@Controller('meta')
+export class MetaController {
+  constructor(private readonly integrationsService: IntegrationsService) {}
 
   /**
    * SPA callback handler — called by the frontend React app when it receives the OAuth code.
@@ -294,34 +374,6 @@ export class MetaController {
     }
   }
 
-  // ─── Webhooks ─────────────────────────────────────────────────────────────────
-
-  @Get('webhooks/leads')
-  @Header('Content-Type', 'text/plain')
-  verifyWebhook(
-    @Query('hub.mode') mode: string,
-    @Query('hub.verify_token') token: string,
-    @Query('hub.challenge') challenge: string,
-  ) {
-    const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || 'campaignai_webhook_secret';
-    
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-      return challenge;
-    }
-    throw new HttpException('Forbidden', HttpStatus.FORBIDDEN);
-  }
-
-  @Post('webhooks/leads')
-  async handleWebhook(@Body() body: any) {
-    if (body.object === 'page') {
-      for (const entry of body.entry || []) {
-        await this.integrationsService.processLeadWebhook(entry);
-      }
-      return 'EVENT_RECEIVED';
-    }
-    throw new HttpException('Not Found', HttpStatus.NOT_FOUND);
-  }
-
   @Post('launch-campaign')
   async launchCampaign(@Body() body: { businessId: string; [key: string]: any }) {
     if (!body.businessId) {
@@ -341,6 +393,7 @@ export class MetaController {
 /**
  * Controller mapping for /api/meta
  */
+@UseGuards(JwtAuthGuard, BusinessAccessGuard)
 @Controller('api/meta')
 export class ApiMetaController {
   constructor(private readonly integrationsService: IntegrationsService) {}
@@ -359,4 +412,4 @@ export class ApiMetaController {
       throw new HttpException(error?.message || 'Failed to launch Meta campaign', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
-}
+}

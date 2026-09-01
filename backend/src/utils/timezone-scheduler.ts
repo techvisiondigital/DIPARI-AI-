@@ -11,6 +11,56 @@ export interface Next10AMSlotResult {
 }
 
 /**
+ * Converts a wall-clock time in `timeZone` into the correct UTC instant.
+ *
+ * Builds the target as if it were UTC, formats that instant back in the target
+ * zone to measure how far it drifted, then subtracts that drift. Handles DST
+ * because the offset is measured at the target date rather than assumed.
+ *
+ * @param month 0-indexed, matching Date.UTC.
+ */
+function utcDateForLocalTime(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  timeZone: string,
+): Date {
+  const targetAsUtcMs = Date.UTC(year, month, day, hour, minute, 0, 0);
+
+  const offsetFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+
+  const oMap: Record<string, string> = {};
+  for (const p of offsetFormatter.formatToParts(new Date(targetAsUtcMs))) {
+    if (p.type !== 'literal') oMap[p.type] = p.value;
+  }
+
+  // Intl renders midnight as hour 24 in some locales; normalise it.
+  const oHour = parseInt(oMap.hour, 10) % 24;
+
+  const localAsUtc = Date.UTC(
+    parseInt(oMap.year, 10),
+    parseInt(oMap.month, 10) - 1,
+    parseInt(oMap.day, 10),
+    oHour,
+    parseInt(oMap.minute, 10),
+    parseInt(oMap.second, 10),
+  );
+
+  return new Date(targetAsUtcMs - (localAsUtc - targetAsUtcMs));
+}
+
+/**
  * Calculates the exact next 10:00 AM execution slot for a given timezone or base date.
  * If current time in local timezone is before 10:00 AM, returns today at 10:00:00 AM.
  * If current time in local timezone is at or after 10:00 AM, returns tomorrow at 10:00:00 AM.
@@ -48,21 +98,19 @@ export function calculateNext10AMSlot(
       }
 
       const currentHour = parseInt(partMap.hour || '0', 10);
-      const currentMinute = parseInt(partMap.minute || '0', 10);
 
       // Determine if today's 10 AM in target timezone is still in the future
-      let dayOffset = 0;
-      if (currentHour > 10 || (currentHour === 10 && currentMinute >= 0)) {
-        // Already 10:00 AM or later in target timezone -> schedule for tomorrow
-        dayOffset = 1;
-      }
+      const dayOffset = currentHour >= 10 ? 1 : 0;
 
-      // Construct target 10:00 AM Date object
       const year = parseInt(partMap.year, 10);
       const month = parseInt(partMap.month, 10) - 1; // 0-indexed
       const day = parseInt(partMap.day, 10) + dayOffset;
 
-      target = new Date(Date.UTC(year, month, day, 10, 0, 0, 0));
+      // This previously returned `Date.UTC(year, month, day, 10, ...)` — the
+      // local calendar date with 10:00 written as a UTC time, with the zone's
+      // offset never applied. For Asia/Kolkata that published at 15:30 IST
+      // instead of 10:00, five and a half hours late.
+      target = utcDateForLocalTime(year, month, day, 10, 0, timeZone);
     } catch {
       // Fallback to standard local timezone calculation if invalid timezone string
       target.setHours(10, 0, 0, 0);
@@ -82,7 +130,15 @@ export function calculateNext10AMSlot(
 
   const timestampMs = target.getTime();
   const timestampSec = Math.floor(timestampMs / 1000);
-  const isToday = target.getDate() === base.getDate() && target.getMonth() === base.getMonth() && target.getFullYear() === base.getFullYear();
+
+  // Compare calendar days in the TARGET timezone. Using getDate() compared the
+  // server's local day, so a slot that is "today" in Kolkata read as tomorrow
+  // on a UTC server, and vice versa.
+  const dayKey = (d: Date) =>
+    timeZone
+      ? new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
+      : `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  const isToday = dayKey(target) === dayKey(base);
 
   return {
     targetDate: target,

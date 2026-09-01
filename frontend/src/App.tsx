@@ -297,8 +297,18 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const state = params.get('state');
-    const error = params.get('error');
     const success = params.get('success');
+
+    // Facebook does not always send `error`. A rejected permission request
+    // comes back as error_code + error_message ("Invalid Scopes: ...") with no
+    // `error` param, which used to leave this handler doing nothing at all —
+    // the user was stranded on a blank callback page with no explanation.
+    const error =
+      params.get('error') ||
+      params.get('error_message') ||
+      params.get('error_description') ||
+      params.get('error_reason') ||
+      (params.get('error_code') ? `Meta returned error code ${params.get('error_code')}` : null);
 
     // Handle admin login route
     if (window.location.pathname === '/admin/login') {
@@ -314,6 +324,19 @@ export default function App() {
         return;
       }
       
+      if (!code) {
+        // No code and no error means Meta redirected back without completing
+        // the exchange. Say so rather than leaving a blank page.
+        addToast(
+          'Meta Connection Incomplete',
+          'Meta redirected back without an authorization code. Please try connecting again.',
+          'alert',
+        );
+        window.history.replaceState({}, '', '/connect-meta');
+        setCurrentPage('connect-meta');
+        return;
+      }
+
       if (code && state) {
         if (processedMetaOAuthCode.current === code) {
           return;
@@ -763,29 +786,22 @@ export default function App() {
 
   const handleAdminModalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const u = adminInputUsername.trim().toLowerCase();
     const p = adminInputPassword.trim();
-    const isAdminUser = u === 'admin' || u === 'admin@campaignai.com' || u === 'admin@campaign.ai';
 
     setAdminModalError('');
     try {
-      if (isAdminUser && (p === 'admin' || p === 'admin123' || p === 'password123' || p === '••••••••')) {
-        const res = await api.auth.adminLogin('admin', 'admin');
-        setUser(res.user);
-        setIsAdminModalOpen(false);
-        setAdminInputUsername('');
-        setAdminInputPassword('');
-        addToast('Admin Access Granted', 'Logged in to Admin Console.', 'success');
-        await loadAdminDashboard();
-      } else {
-        const res = await api.auth.adminLogin(adminInputUsername.trim(), p);
-        setUser(res.user);
-        setIsAdminModalOpen(false);
-        setAdminInputUsername('');
-        setAdminInputPassword('');
-        addToast('Admin Access Granted', 'Logged in to Admin Console.', 'success');
-        await loadAdminDashboard();
-      }
+      // Previously, typing one of a hardcoded list of passwords ('admin',
+      // 'admin123', 'password123') made this send the literal credentials
+      // 'admin'/'admin' to the server instead of what was actually typed.
+      // The server no longer honours that, and a client-side password list is
+      // never a real check. Always send exactly what the user entered.
+      const res = await api.auth.adminLogin(adminInputUsername.trim(), p);
+      setUser(res.user);
+      setIsAdminModalOpen(false);
+      setAdminInputUsername('');
+      setAdminInputPassword('');
+      addToast('Admin Access Granted', 'Logged in to Admin Console.', 'success');
+      await loadAdminDashboard();
     } catch (err: any) {
       setAdminModalError(err.message || 'Invalid admin credentials. Use "admin" for both username and password.');
     }
@@ -2408,7 +2424,7 @@ export default function App() {
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="admin@campaignai.com"
+                  placeholder="admin@visionpilot.ai"
                   value={adminInputUsername}
                   onChange={(e) => setAdminInputUsername(e.target.value)}
                   required
