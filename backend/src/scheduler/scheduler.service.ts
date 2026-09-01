@@ -256,11 +256,13 @@ export class SchedulerService implements OnModuleInit {
 
       for (const bus of businesses) {
         try {
-          const upcomingPosts = await this.firebase.getScheduledPostsByBusinessId(bus.id);
-          const activeUpcoming = (upcomingPosts || []).filter((p: any) => p.status === 'SCHEDULED');
+          // Only the COUNT of upcoming posts matters here. Fetching every
+          // scheduled post for every business just to call .length multiplied
+          // Firestore reads by the size of the whole collection.
+          const activeUpcomingCount = await this.firebase.countScheduledPosts(bus.id, 'SCHEDULED');
 
-          if (activeUpcoming.length < 7) {
-            this.logger.log(`[Cron Job] Business ${bus.id} (${(bus as any).name || 'Unnamed'}) has only ${activeUpcoming.length} scheduled posts. Auto-generating next week's AI posts…`);
+          if (activeUpcomingCount < 7) {
+            this.logger.log(`[Cron Job] Business ${bus.id} (${(bus as any).name || 'Unnamed'}) has only ${activeUpcomingCount} scheduled posts. Auto-generating next week's AI posts…`);
             await this.scheduleInstantWeek({
               businessId: bus.id,
               count: 7,

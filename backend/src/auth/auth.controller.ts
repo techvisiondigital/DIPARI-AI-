@@ -1,10 +1,12 @@
-import { Controller, Post, Body, Get, UseGuards, Request, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Request, UnauthorizedException, ServiceUnavailableException, Logger } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import * as admin from 'firebase-admin';
 
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(private readonly authService: AuthService) {}
 
   @Get('config')
@@ -54,8 +56,26 @@ export class AuthController {
           profileCompleted,
         }
       };
-    } catch (e) {
-      throw new UnauthorizedException('Authentication token invalid or expired: ' + e.message);
+    } catch (e: any) {
+      // Only a genuine token failure is a 401. Infrastructure failures
+      // (Firestore quota exhausted, network, permission-denied) were previously
+      // reported to the user as "token invalid or expired", which hid the real
+      // cause and sent debugging in the wrong direction for hours.
+      const isTokenError =
+        typeof e?.code === 'string' && e.code.startsWith('auth/');
+
+      this.logger.error(
+        `[auth/sync] failed (code=${e?.code ?? 'n/a'}): ${e?.message}`,
+        e?.stack,
+      );
+
+      if (isTokenError) {
+        throw new UnauthorizedException('Authentication token invalid or expired');
+      }
+
+      throw new ServiceUnavailableException(
+        'Sign-in is temporarily unavailable. Please try again shortly.',
+      );
     }
   }
 

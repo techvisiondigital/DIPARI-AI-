@@ -140,6 +140,9 @@ class MockQuery {
         if (w.op === 'array-contains') {
           return Array.isArray(fieldVal) && fieldVal.includes(w.val);
         }
+        if (w.op === 'in') {
+          return Array.isArray(w.val) && w.val.includes(fieldVal);
+        }
         return false;
       });
     }
@@ -591,8 +594,13 @@ export class FirebaseService implements OnModuleInit {
     return { id: doc.id, ...doc.data() } as any;
   }
 
-  async getAllUsers() {
-    const snap = await this.col('users').orderBy('createdAt', 'desc').get();
+  /**
+   * Admin listing. Bounded on purpose — an unbounded collection read costs one
+   * Firestore read per document and grows without limit as the product does.
+   * Raise `limit` (or add real pagination) if the admin UI ever needs more.
+   */
+  async getAllUsers(limit = 200) {
+    const snap = await this.col('users').orderBy('createdAt', 'desc').limit(limit).get();
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
   }
 
@@ -650,8 +658,9 @@ export class FirebaseService implements OnModuleInit {
     return { id, ...(updated?.data() || {}) };
   }
 
-  async getAllBusinesses() {
-    const snap = await this.col('businesses').orderBy('createdAt', 'desc').get();
+  /** Bounded admin listing — see getAllUsers for why. */
+  async getAllBusinesses(limit = 200) {
+    const snap = await this.col('businesses').orderBy('createdAt', 'desc').limit(limit).get();
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
   }
 
@@ -720,10 +729,10 @@ export class FirebaseService implements OnModuleInit {
     return results.sort((a: any, b: any) => (b.createdAt?.toDate?.()?.getTime?.() || 0) - (a.createdAt?.toDate?.()?.getTime?.() || 0));
   }
 
-  async getAllCampaigns() {
-    const snap = await this.col('campaigns').get();
-    const results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
-    return results.sort((a: any, b: any) => (b.createdAt?.toDate?.()?.getTime?.() || 0) - (a.createdAt?.toDate?.()?.getTime?.() || 0));
+  /** Bounded admin listing — see getAllUsers for why. */
+  async getAllCampaigns(limit = 200) {
+    const snap = await this.col('campaigns').orderBy('createdAt', 'desc').limit(limit).get();
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
   }
 
   async updateCampaign(id: string, data: Record<string, any>) {
@@ -971,9 +980,18 @@ export class FirebaseService implements OnModuleInit {
     return { id, ...payment };
   }
 
-  async getAllSubscriptions() {
-    const snap = await this.col('subscriptions').get();
+  /** Bounded admin listing — see getAllUsers for why. */
+  async getAllSubscriptions(limit = 500) {
+    const snap = await this.col('subscriptions').limit(limit).get();
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  }
+
+  /** Counts subscriptions without reading them (~1 read per 1000 matched). */
+  async countSubscriptions(status?: string): Promise<number> {
+    let q: any = this.col('subscriptions');
+    if (status) q = q.where('status', '==', status);
+    const snap = await q.count().get();
+    return snap.data().count;
   }
 
   async getAdminConfig<T = any>(key: string): Promise<T | null> {
@@ -1002,9 +1020,24 @@ export class FirebaseService implements OnModuleInit {
     return { id: businessId, ...doc.data() };
   }
 
-  async getAllPayments() {
-    const snap = await this.col('payments').get();
+  /** Bounded admin listing — see getAllUsers for why. */
+  async getAllPayments(limit = 500) {
+    const snap = await this.col('payments').limit(limit).get();
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  }
+
+  /**
+   * Reads only payments in the given statuses, instead of pulling the whole
+   * payments collection and filtering in JS. Used for revenue totals.
+   * Requires index: payments (status ASC) — single-field, created automatically.
+   */
+  async getPaymentsByStatuses(statuses: string[], limit = 1000) {
+    if (!statuses?.length) return [];
+    const snap = await this.col('payments')
+      .where('status', 'in', statuses.slice(0, 30))
+      .limit(limit)
+      .get();
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
   }
 
   // ─── Support Tickets ──────────────────────────────────────────────────────────
@@ -1413,19 +1446,56 @@ export class FirebaseService implements OnModuleInit {
     return { id, ...updated.data() };
   }
 
-  async getDueScheduledPosts(): Promise<any[]> {
+  /**
+   * Returns SCHEDULED posts whose scheduledTime has already passed.
+   *
+   * The `scheduledTime <= now` filter MUST stay inside the Firestore query.
+   * Filtering in JS instead makes this read every SCHEDULED document in the
+   * collection on every run, and this is called by a cron every 10 minutes
+   * (144x/day) — which is what exhausted the Firestore daily read quota.
+   *
+   * Requires composite index: scheduledPosts (status ASC, scheduledTime ASC).
+   */
+  async getDueScheduledPosts(limit = 200): Promise<any[]> {
+    const now = new Date();
+
+    // Local mock mode persists dates as JSON strings, which the mock's
+    // relational comparison can't evaluate — and it has no quota to protect.
+    // Keep the old in-memory filter there, use the indexed query in production.
+    if (!process.env.FIREBASE_PROJECT_ID) {
+      const snap = await this.col('scheduledPosts')
+        .where('status', '==', 'SCHEDULED')
+        .get();
+      return snap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as any))
+        .filter((p) => {
+          const scheduled = p.scheduledTime instanceof Date
+            ? p.scheduledTime
+            : new Date(p.scheduledTime?._seconds ? p.scheduledTime._seconds * 1000 : p.scheduledTime);
+          return scheduled <= now;
+        });
+    }
+
     const snap = await this.col('scheduledPosts')
       .where('status', '==', 'SCHEDULED')
+      .where('scheduledTime', '<=', now)
+      .orderBy('scheduledTime', 'asc')
+      .limit(limit)
       .get();
-    const now = new Date();
-    return snap.docs
-      .map((d) => ({ id: d.id, ...d.data() } as any))
-      .filter((p) => {
-        const scheduled = p.scheduledTime instanceof Date
-          ? p.scheduledTime
-          : new Date(p.scheduledTime?._seconds ? p.scheduledTime._seconds * 1000 : p.scheduledTime);
-        return scheduled <= now;
-      });
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
+  }
+
+  /**
+   * Counts documents matching a scheduledPosts query without reading them.
+   * Firestore bills an aggregation as ~1 read per 1000 matched documents,
+   * so this is dramatically cheaper than fetching the docs to call .length.
+   */
+  async countScheduledPosts(businessId?: string, status?: string): Promise<number> {
+    let q: any = this.col('scheduledPosts');
+    if (businessId) q = q.where('businessId', '==', businessId);
+    if (status) q = q.where('status', '==', status);
+    const snap = await q.count().get();
+    return snap.data().count;
   }
 
   // ─── Generic Document Utilities ─────────────────────────────────────────────

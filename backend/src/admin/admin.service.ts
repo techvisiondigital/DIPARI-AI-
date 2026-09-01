@@ -38,16 +38,27 @@ export class AdminService {
     const totalBusinesses = await this.firebase.countBusinesses();
     const activeCampaigns = await this.firebase.countCampaigns(undefined, 'ACTIVE');
 
-    const subscriptions = await this.firebase.getAllSubscriptions();
-    const activeSubscribers = subscriptions.filter((s: any) => s.status === 'ACTIVE').length;
-    const payments = await this.firebase.getAllPayments();
-    const totalRevenue = payments
-      .filter((payment: any) => payment.status === 'PAID' || payment.status === 'COMPLETED')
-      .reduce((sum: number, payment: any) => sum + Number(payment.amountPaid || payment.amount || 0), 0);
+    // Previously read EVERY subscription and EVERY payment just to derive three
+    // numbers. Now: one aggregation for the subscriber count, and only the paid
+    // payments are actually read (revenue needs their amounts to sum).
+    const activeSubscribers = await this.firebase.countSubscriptions('ACTIVE');
+    const paidPaymentsList = await this.firebase.getPaymentsByStatuses(['PAID', 'COMPLETED']);
+    const totalRevenue = paidPaymentsList.reduce(
+      (sum: number, payment: any) => sum + Number(payment.amountPaid || payment.amount || 0),
+      0,
+    );
 
     const auditLogsCount = await this.firebase.countAuditLogs();
-    const businessList = await this.firebase.getAllBusinesses();
-    const scheduled = (await Promise.all(businessList.map((business: any) => this.firebase.getScheduledPostsByBusinessId(business.id)))).flat();
+
+    // These two numbers used to be derived by loading EVERY business and then
+    // every scheduled post for each of them (an N+1 fan-out that cost thousands
+    // of Firestore reads per dashboard load). Aggregation counts give the same
+    // numbers for ~1 read each.
+    const [jobsCompleted, activeJobs] = await Promise.all([
+      this.firebase.countScheduledPosts(undefined, 'PUBLISHED'),
+      this.firebase.countScheduledPosts(undefined, 'SCHEDULED'),
+    ]);
+
     const memory = process.memoryUsage ? process.memoryUsage() : { rss: 150 * 1024 * 1024 };
     const freeMem = os.freemem();
     const totalMem = os.totalmem();
@@ -60,7 +71,7 @@ export class AdminService {
       activeCampaigns,
       activeSubscribers,
       totalRevenue,
-      paidPayments: payments.filter((payment: any) => payment.status === 'PAID' || payment.status === 'COMPLETED').length,
+      paidPayments: paidPaymentsList.length,
       auditLogsCount,
       platformHealth: 'OPERATIONAL',
       systemVersion: 'v2.4.0',
@@ -70,8 +81,8 @@ export class AdminService {
       cpuModel: cpus[0]?.model || 'Generic CPU',
       systemUptime: Math.round(os.uptime()),
       processUptime: Math.round(process.uptime()),
-      jobsCompleted: scheduled.filter((post: any) => post.status === 'PUBLISHED').length,
-      activeJobs: scheduled.filter((post: any) => post.status === 'SCHEDULED').length,
+      jobsCompleted,
+      activeJobs,
     };
   }
 
