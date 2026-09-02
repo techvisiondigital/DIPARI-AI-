@@ -824,7 +824,19 @@ ${promptDetails?.topic ? `Specific Post Topic: ${promptDetails.topic}` : ''}`;
             this.logger.log(
               `[AIService] Pollinations ${model} succeeded in ${Date.now() - startedAt}ms`,
             );
-            return { success: true, imageUrl: url, model: `pollinations-${model}` };
+            // Return the BYTES, not the URL. A Pollinations URL is a generation
+            // request, not a hosted file: every fetch re-renders the image,
+            // takes 20-60s and often times out. Handing the URL back meant the
+            // bytes just downloaded were discarded and something downstream —
+            // usually the user's browser — paid for a fresh render and gave up,
+            // which is what produced blank/"Retry" post thumbnails.
+            const mime = String(res.headers?.['content-type'] || 'image/jpeg').split(';')[0];
+            const b64 = Buffer.from(res.data).toString('base64');
+            return {
+              success: true,
+              imageUrl: `data:${mime};base64,${b64}`,
+              model: `pollinations-${model}`,
+            };
           }
           this.logger.warn(`[AIService] Pollinations ${model} returned an unusable body.`);
         } catch (polErr: any) {

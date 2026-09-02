@@ -5,27 +5,36 @@ import {
   BadRequestException,
   NotImplementedException,
 } from '@nestjs/common';
+import axios from 'axios';
 import { FirebaseService } from '../firebase/firebase.service';
 import { AiService } from '../ai/ai.service';
 import { BusinessIntelligenceService } from '../business/business-intelligence.service';
 import { PromptBuilderService } from '../prompt-builder/prompt-builder.service';
 import { IntegrationsService } from '../integrations/integrations.service';
 import { getPlanLimits } from '../payment/payment.constants';
+import {
+  decodeDataUri,
+  extensionForContentType,
+  inlineImageIfSmallEnough,
+} from '../utils/image-storage';
 
 /**
  * Which weekdays a plan posts on, keyed by the plan's postsPerWeek allowance.
- * Three posts a week deliberately means Tuesday / Thursday / Saturday so the
- * gaps between posts stay even across the week.
+ * Three posts a week means Monday / Wednesday / Friday — even gaps across the
+ * working week, and the pattern the product spec calls for.
  */
-const POSTING_DAY_PATTERNS: Record<number, string[]> = {
+export const POSTING_DAY_PATTERNS: Record<number, string[]> = {
   1: ['Wednesday'],
   2: ['Tuesday', 'Thursday'],
-  3: ['Tuesday', 'Thursday', 'Saturday'],
-  4: ['Monday', 'Tuesday', 'Thursday', 'Saturday'],
+  3: ['Monday', 'Wednesday', 'Friday'],
+  4: ['Monday', 'Wednesday', 'Friday', 'Saturday'],
   5: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
   6: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
   7: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
 };
+
+/** The weekdays used whenever no explicit day selection is supplied. */
+export const DEFAULT_POSTING_DAYS = POSTING_DAY_PATTERNS[3];
 
 export interface ContentStrategyData {
   monthlyMarketingStrategy: string;
@@ -143,15 +152,31 @@ export class ContentService {
         aspectRatio,
       });
 
-      // 5. Upload composited PNG buffer to Firebase Storage
+      // 5. Upload composited PNG buffer to permanent storage.
       const timestamp = Date.now();
       const destinationPath = `creatives/${businessId}/${timestamp}_creative.png`;
       const uploadResult = await this.firebase.uploadFileBuffer(pngBuffer, destinationPath, 'image/png');
 
-      const finalUrl = uploadResult?.publicUrl || bgImageUrl || `data:image/png;base64,${pngBuffer.toString('base64')}`;
+      // The stored URL is handed straight to a browser <img> and to Meta, so it
+      // has to be a URL that serves bytes immediately. It used to fall back to
+      // `bgImageUrl` — a Pollinations *generation* URL that re-renders the image
+      // on every single request, takes 20-60s, and frequently times out. That is
+      // what turned calendar thumbnails into "Retry" buttons. If the upload did
+      // not produce a hosted URL, inline the bytes instead: a data: URI always
+      // renders.
+      const finalUrl =
+        uploadResult?.publicUrl || inlineImageIfSmallEnough(pngBuffer, 'image/png');
       const durationMs = Date.now() - startedAt;
 
-      this.logger.log(`[ContentService] Successfully generated & composited creative for ${ctx.businessName} in ${durationMs}ms: ${finalUrl}`);
+      if (!uploadResult?.publicUrl) {
+        this.logger.warn(
+          `[ContentService] Creative for ${businessId} could not be uploaded to storage. Configure CLOUDINARY_* or Firebase Storage credentials.`,
+        );
+      }
+
+      this.logger.log(
+        `[ContentService] Successfully generated & composited creative for ${ctx.businessName} in ${durationMs}ms`,
+      );
       return finalUrl;
     } catch (err: any) {
       this.logger.error(`[ContentService] Image generation & compositing error for ${businessId}: ${err.message}`);
@@ -172,9 +197,102 @@ export class ContentService {
         }
       }
 
-      const encoded = encodeURIComponent(brandPrompt.substring(0, 900));
-      return `https://image.pollinations.ai/prompt/${encoded}?width=1080&height=1080&nologo=true&model=flux&seed=${Date.now()}`;
+      // Render the fallback ONCE here, server-side, and store the resulting
+      // bytes. Returning the Pollinations generation URL itself meant every
+      // browser that later displayed the post re-triggered a 20-60s render,
+      // which is why these thumbnails showed "Retry" instead of a picture.
+      const persisted = await this.renderAndPersistFallbackImage(businessId, brandPrompt);
+      if (persisted) return persisted;
+
+      // Nothing renderable could be produced. An empty string makes the
+      // calendar show "No image" (with a working Regenerate button) rather
+      // than a broken <img> that errors in the browser.
+      this.logger.error(
+        `[ContentService] No creative could be produced for ${businessId}; storing an empty imageUrl.`,
+      );
+      return '';
     }
+  }
+
+  /**
+   * Renders the fallback prompt to actual image bytes and uploads them, so the
+   * value stored on the post is a URL that serves an image instantly instead of
+   * one that regenerates on every view.
+   */
+  private async renderAndPersistFallbackImage(
+    businessId: string,
+    brandPrompt: string,
+  ): Promise<string> {
+    let buffer: Buffer | null = null;
+    let contentType = 'image/png';
+
+    // Preferred: the normal provider cascade (Cloudflare -> Together -> HF ->
+    // Pollinations). It may hand back a data: URI or a hosted URL.
+    try {
+      const result = await this.aiService.generateImage(brandPrompt, { aspect_ratio: '1:1' });
+      const url = result?.imageUrl || '';
+      const decoded = decodeDataUri(url);
+      if (decoded) {
+        buffer = decoded.buffer;
+        contentType = decoded.contentType;
+      } else if (url) {
+        const fetched = await this.fetchImageBytes(url);
+        if (fetched) {
+          buffer = fetched.buffer;
+          contentType = fetched.contentType;
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `[ContentService] Fallback image provider failed for ${businessId}: ${err.message}`,
+      );
+    }
+
+    if (!buffer || buffer.length === 0) return '';
+
+    try {
+      const ext = extensionForContentType(contentType);
+      const destinationPath = `creatives/${businessId}/${Date.now()}_fallback.${ext}`;
+      const uploaded = await this.firebase.uploadFileBuffer(buffer, destinationPath, contentType);
+      if (uploaded?.publicUrl) return uploaded.publicUrl;
+    } catch (err: any) {
+      this.logger.warn(
+        `[ContentService] Could not upload fallback creative for ${businessId}: ${err.message}`,
+      );
+    }
+
+    // Storage unavailable — inline the bytes if they are small enough to store.
+    return inlineImageIfSmallEnough(buffer, contentType);
+  }
+
+  /**
+   * Downloads image bytes with a server-side timeout generous enough for
+   * on-demand generators (Pollinations can take up to a minute on a cold
+   * prompt), which a browser would never wait for.
+   */
+  private async fetchImageBytes(
+    url: string,
+  ): Promise<{ buffer: Buffer; contentType: string } | null> {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const res = await axios.get(url, {
+          responseType: 'arraybuffer',
+          timeout: 90_000,
+          maxContentLength: 25 * 1024 * 1024,
+          validateStatus: (s) => s >= 200 && s < 300,
+        });
+        const buffer = Buffer.from(res.data);
+        if (buffer.length > 0) {
+          const contentType = String(res.headers?.['content-type'] || 'image/png').split(';')[0];
+          return { buffer, contentType };
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `[ContentService] Image download attempt ${attempt} failed for ${url.substring(0, 90)}: ${err.message}`,
+        );
+      }
+    }
+    return null;
   }
 
   /**
@@ -391,8 +509,11 @@ export class ContentService {
     businessId: string,
     options: { selectedDays?: string[]; durationWeeks?: number; industry?: string } = {},
   ) {
-    // Default: 4-week calendar with 3 posts per week (Tuesday, Thursday, Saturday) = 12 posts
-    const selectedDays = options.selectedDays || ['Tuesday', 'Thursday', 'Saturday'];
+    // Default: 4-week calendar with 3 posts per week (Monday, Wednesday, Friday) = 12 posts
+    const selectedDays =
+      options.selectedDays && options.selectedDays.length > 0
+        ? options.selectedDays
+        : DEFAULT_POSTING_DAYS;
     const durationWeeks = options.durationWeeks || 4;
 
     this.logger.log(
@@ -603,7 +724,7 @@ export class ContentService {
   /**
    * Resolves the weekdays this business should post on from its active
    * subscription.  FREE / STARTER / ADVANCE allow 3 posts a week
-   * (Tuesday, Thursday, Saturday), PREMIUM allows 5, demo plans allow 7.
+   * (Monday, Wednesday, Friday), PREMIUM allows 5, demo plans allow 7.
    */
   async getPlanPostingDays(businessId: string): Promise<string[]> {
     let postsPerWeek = 3;
@@ -626,7 +747,7 @@ export class ContentService {
   /** Alias method for backward compatibility */
   async generateContentPlan(
     businessId: string,
-    selectedDays: string[] = ['Tuesday', 'Thursday', 'Saturday'],
+    selectedDays: string[] = DEFAULT_POSTING_DAYS,
     durationWeeks = 4,
     industry?: string,
   ) {

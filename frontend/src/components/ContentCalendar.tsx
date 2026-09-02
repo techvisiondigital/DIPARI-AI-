@@ -53,6 +53,30 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [brokenImageIds, setBrokenImageIds] = useState<Set<string>>(new Set());
+  // Some older calendar rows still hold an on-demand generation URL
+  // (image.pollinations.ai) rather than a stored file. Those render the image
+  // from scratch on every request and time out often enough that a single
+  // failure is not proof the image is gone — so each row gets one silent retry
+  // before it is shown as broken.
+  const [imageRetryCounts, setImageRetryCounts] = useState<Record<string, number>>({});
+  const MAX_IMAGE_RETRIES = 1;
+
+  const handleImageError = (entryId: string) => {
+    const attempts = imageRetryCounts[entryId] || 0;
+    if (attempts < MAX_IMAGE_RETRIES) {
+      setImageRetryCounts(previous => ({ ...previous, [entryId]: attempts + 1 }));
+      return;
+    }
+    setBrokenImageIds(previous => new Set(previous).add(entryId));
+  };
+
+  // Appends a cache-busting param so the retry is a genuine second attempt
+  // rather than the browser replaying its cached failure.
+  const imageSrcFor = (entryId: string, url: string) => {
+    const attempts = imageRetryCounts[entryId] || 0;
+    if (attempts === 0 || url.startsWith('data:')) return url;
+    return `${url}${url.includes('?') ? '&' : '?'}vp_retry=${attempts}`;
+  };
 
   // Google Sheets Selection & Editing State
   const [selectedCell, setSelectedCell] = useState<{ rowId: string; colName: string } | null>(null);
@@ -421,6 +445,14 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
           if (!prev.has(id)) return prev;
           const next = new Set(prev);
           next.delete(id);
+          return next;
+        });
+        // Reset the retry budget too, otherwise the new image is marked broken
+        // on its very first hiccup because the old attempts still count.
+        setImageRetryCounts(prev => {
+          if (!(id in prev)) return prev;
+          const next = { ...prev };
+          delete next[id];
           return next;
         });
         onToast('Regeneration Complete', `New content and image generated. (${newCount}/2 uses)`, 'success');
@@ -917,7 +949,8 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
                     <td style={{ borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #cbd5e1', padding: '6px', textAlign: 'center', verticalAlign: 'middle', background: '#fafafa' }}>
                       {entry.imageUrl && !brokenImageIds.has(entry.id) ? (
                         <img
-                          src={entry.imageUrl}
+                          key={`${entry.id}-${imageRetryCounts[entry.id] || 0}`}
+                          src={imageSrcFor(entry.id, entry.imageUrl)}
                           alt={entry.headline ? `Visual for ${entry.headline}` : 'Post visual'}
                           loading="lazy"
                           title="Click to open the post preview"
@@ -927,7 +960,7 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
                             display: 'block', margin: '0 auto', border: '1px solid #e2e8f0',
                             cursor: 'pointer', background: '#f1f5f9',
                           }}
-                          onError={() => setBrokenImageIds(previous => new Set(previous).add(entry.id))}
+                          onError={() => handleImageError(entry.id)}
                         />
                       ) : brokenImageIds.has(entry.id) ? (
                         // Distinct from "not generated yet" — the image exists but

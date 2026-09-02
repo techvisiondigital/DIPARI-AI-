@@ -159,7 +159,7 @@ Goals: ${ctx.businessGoals}`;
     businessId: string,
     strategy: any,
     weekNumber: number,
-    selectedDays: string[] = ['Tuesday', 'Thursday', 'Saturday'],
+    selectedDays: string[] = ['Monday', 'Wednesday', 'Friday'],
   ): Promise<{ systemPrompt: string; userPrompt: string }> {
     const ctx = await this.businessIntelligence.getBusinessContext(businessId);
     const weekTheme = strategy?.weeklyThemes?.find((w: any) => w.weekNumber === weekNumber) || {

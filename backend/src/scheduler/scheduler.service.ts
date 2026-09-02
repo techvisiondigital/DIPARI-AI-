@@ -1,6 +1,12 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import axios from 'axios';
 import { FirebaseService } from '../firebase/firebase.service';
+import {
+  decodeDataUri,
+  extensionForContentType,
+  inlineImageIfSmallEnough,
+} from '../utils/image-storage';
 import { IntegrationsService } from '../integrations/integrations.service';
 import { AiService } from '../ai/ai.service';
 import { calculateNext10AMSlot } from '../utils/timezone-scheduler';
@@ -596,6 +602,60 @@ export class SchedulerService implements OnModuleInit {
     };
   }
 
+  /**
+   * Turns whatever the image provider returned into a URL that is safe to store
+   * on a Firestore document and safe to hand to a browser or to Meta.
+   *
+   * Providers return either a base64 data URI (too large for a Firestore
+   * document, which is capped at 1 MiB) or an on-demand generation URL such as
+   * Pollinations, which re-renders the image on every request and routinely
+   * times out in a browser. Both are uploaded to storage here so the stored
+   * value is a plain hosted file.
+   */
+  private async persistGeneratedImage(
+    businessId: string,
+    generated: string,
+    postIndex: number,
+  ): Promise<string> {
+    let buffer: Buffer | null = null;
+    let contentType = 'image/png';
+
+    try {
+      const decoded = decodeDataUri(generated);
+      if (decoded) {
+        buffer = decoded.buffer;
+        contentType = decoded.contentType;
+      } else if (/^https?:\/\//i.test(generated)) {
+        const res = await axios.get(generated, {
+          responseType: 'arraybuffer',
+          timeout: 90_000,
+          maxContentLength: 25 * 1024 * 1024,
+        });
+        buffer = Buffer.from(res.data);
+        contentType = String(res.headers?.['content-type'] || 'image/png').split(';')[0];
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `[SchedulerService] Could not read generated image bytes for ${businessId}: ${err.message}`,
+      );
+    }
+
+    if (!buffer || buffer.length === 0) return '';
+
+    try {
+      const ext = extensionForContentType(contentType);
+      const destinationPath = `creatives/${businessId}/${Date.now()}_${postIndex}_instant.${ext}`;
+      const uploaded = await this.firebase.uploadFileBuffer(buffer, destinationPath, contentType);
+      if (uploaded?.publicUrl) return uploaded.publicUrl;
+    } catch (err: any) {
+      this.logger.warn(
+        `[SchedulerService] Could not upload generated image for ${businessId}: ${err.message}`,
+      );
+    }
+
+    return inlineImageIfSmallEnough(buffer, contentType);
+  }
+
   /** Build a distinct business-aware plan for the Instant Posts panel with AI captions and unique images. */
   async scheduleInstantWeek(data: {
     businessId: string;
@@ -679,11 +739,20 @@ export class SchedulerService implements OnModuleInit {
       const promptText = `Create a square social media advertising image for ${businessName}. Category: ${category}. Exact offering: ${productsServices}. Main visual concept: ${theme}. ${subjectRules} Brand tone: ${brandTone}. Photorealistic, polished commercial advertising photography, clear subject, no readable text, no watermark, no unrelated props.`;
       try {
         const result = await this.aiService.generateImage(promptText, { aspect_ratio: '1:1' });
-        if (result?.imageUrl) return result.imageUrl;
+        const generated = result?.imageUrl || '';
+        if (generated) {
+          // The provider hands back a data: URI. That is far too large to store
+          // on a Firestore document (1 MiB cap) and must become a hosted URL.
+          return await this.persistGeneratedImage(data.businessId, generated, postIndex);
+        }
       } catch (err: any) {
         this.logger.warn(`AI Image generation threw error in buildImageUrl: ${err.message}`);
       }
-      return `https://image.pollinations.ai/prompt/${encodeURIComponent(promptText)}?width=1080&height=1080&nologo=true&model=flux&seed=${Date.now()}_${postIndex}`;
+      // Every provider failed. An empty imageUrl renders as "No image" with a
+      // working Regenerate button. Returning a Pollinations generation URL here
+      // instead meant the browser had to render the image itself on every view,
+      // which timed out and showed "Retry".
+      return '';
     };
 
     const posts: any[] = [];
