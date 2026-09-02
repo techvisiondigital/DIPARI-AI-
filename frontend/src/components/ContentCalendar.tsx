@@ -52,6 +52,7 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [isAutoGenerating, setIsAutoGenerating] = useState(false);
   const [brokenImageIds, setBrokenImageIds] = useState<Set<string>>(new Set());
   // Some older calendar rows still hold an on-demand generation URL
   // (image.pollinations.ai) rather than a stored file. Those render the image
@@ -154,14 +155,58 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
 
       const merged = [...calendarList, ...normalizedScheduled];
       setCalendarEntries(merged);
+      return merged;
     } catch (err: any) {
       onToast('Error', err.message || 'Failed to load content calendar', 'alert');
+      return [];
     }
   };
 
+  // The plan used to be created only by the Meta OAuth callback, so if that
+  // callback errored once (a reused authorization code, a closed tab) the
+  // calendar stayed empty for good with no way back. Opening the page with
+  // nothing in it now builds the plan.
+  const didAutoGenerate = useRef(false);
   useEffect(() => {
-    fetchCalendar();
+    if (!businessId) return;
+    didAutoGenerate.current = false;
+
+    (async () => {
+      const entries = await fetchCalendar();
+      if (didAutoGenerate.current || !entries || entries.length > 0) return;
+      didAutoGenerate.current = true;
+
+      setIsAutoGenerating(true);
+      try {
+        const result = await api.content.ensureInitialWeek(businessId);
+        if (result?.created) {
+          const days: string[] = Array.isArray(result.selectedDays) ? result.selectedDays : [];
+          onToast(
+            'Content plan ready',
+            days.length
+              ? `Your ${days.join(', ')} plan is ready. Images are being generated now.`
+              : 'Your content plan is ready. Images are being generated now.',
+            'success',
+          );
+        }
+        await fetchCalendar();
+      } catch (err: any) {
+        onToast('Could not build your content plan', err.message || 'Please try again.', 'alert');
+      } finally {
+        setIsAutoGenerating(false);
+      }
+    })();
   }, [businessId]);
+
+  // Creatives are produced in the background after the posts are saved, so poll
+  // while any row is still without one and stop as soon as they have all landed.
+  useEffect(() => {
+    const awaitingImages = calendarEntries.some(e => !e.imageUrl && !e.isSchedulerPost);
+    if (!awaitingImages || !businessId) return;
+
+    const timer = setInterval(() => { fetchCalendar(); }, 15000);
+    return () => clearInterval(timer);
+  }, [calendarEntries, businessId]);
 
   // Sync regenerateCounts from loaded entries
   useEffect(() => {
@@ -981,7 +1026,7 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
                         </button>
                       ) : (
                         <div
-                          title="No image generated yet"
+                          title={entry.isSchedulerPost ? 'No image' : 'The creative for this post is being generated'}
                           style={{
                             width: '76px', height: '76px', background: '#f8fafc',
                             border: '1px dashed #cbd5e1', borderRadius: '8px', display: 'flex',
@@ -990,7 +1035,9 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
                           }}
                         >
                           <ImageIcon size={18} />
-                          <span style={{ fontSize: '9px', fontWeight: 600, lineHeight: 1 }}>No image</span>
+                          <span style={{ fontSize: '9px', fontWeight: 600, lineHeight: 1, textAlign: 'center' }}>
+                            {entry.isSchedulerPost ? 'No image' : 'Generating…'}
+                          </span>
                         </div>
                       )}
                     </td>
@@ -1157,14 +1204,18 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
                   <td colSpan={6} style={{ padding: '48px 24px', textAlign: 'center', background: '#ffffff', borderBottom: '1px solid #cbd5e1' }}>
                     <CalendarIcon size={30} style={{ color: '#cbd5e1', marginBottom: '12px' }} />
                     <div style={{ fontWeight: 700, color: '#334155', fontSize: '0.95rem', marginBottom: '6px' }}>
-                      No posts scheduled for {monthYearString}
+                      {isAutoGenerating
+                        ? 'Building your content plan…'
+                        : `No posts scheduled for ${monthYearString}`}
                     </div>
                     <p style={{ margin: '0 auto 18px', color: '#64748b', fontSize: '0.82rem', maxWidth: '400px', lineHeight: 1.6 }}>
-                      {calendarEntries.length > 0
-                        ? 'Your content plan is scheduled in another month — use the arrows above to browse to it, or add a row here.'
-                        : searchTerm || statusFilter !== 'ALL'
-                          ? 'No posts match your current search or status filter.'
-                          : 'Your weekly content plan will appear here once it has been generated.'}
+                      {isAutoGenerating
+                        ? 'Writing captions and scheduling your posts. This takes a few seconds — the images are generated right after.'
+                        : calendarEntries.length > 0
+                          ? 'Your content plan is scheduled in another month — use the arrows above to browse to it, or add a row here.'
+                          : searchTerm || statusFilter !== 'ALL'
+                            ? 'No posts match your current search or status filter.'
+                            : 'Your weekly content plan will appear here once it has been generated.'}
                     </p>
                     <button
                       onClick={() => setIsAddModalOpen(true)}

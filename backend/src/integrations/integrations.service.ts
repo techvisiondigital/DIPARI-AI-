@@ -6,6 +6,9 @@ import { AiService } from '../ai/ai.service';
 import { launchFullMetaCampaignHierarchy, describeMetaError } from '../lib/meta/ads-manager';
 import { GRAPH_API_BASE, FACEBOOK_DIALOG_BASE } from '../lib/meta/graph-version';
 
+/** Window during which a completed Meta OAuth exchange is replayed. */
+const META_OAUTH_REPLAY_WINDOW_MS = 10 * 60 * 1000;
+
 dotenv.config();
 
 @Injectable()
@@ -16,6 +19,8 @@ export class IntegrationsService {
    * callback requests that arrive while the original exchange is in progress.
    */
   private readonly metaOAuthExchanges = new Map<string, Promise<any>>();
+  // How long a completed OAuth exchange is replayed for, so a refreshed or
+  // re-delivered callback does not present the same code to Meta twice.
   /**
    * Live Meta calls are only enabled when explicitly requested and both app
    * credentials are usable.  This keeps local development functional when a
@@ -352,10 +357,26 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
     const exchange = this.connectMetaOnce(code, businessId, customRedirectUri);
     this.metaOAuthExchanges.set(exchangeKey, exchange);
+
     try {
-      return await exchange;
-    } finally {
+      const result = await exchange;
+
+      // Meta rejects an authorization code the second time it is presented
+      // ("This authorization code has been used"). The entry used to be
+      // dropped as soon as the exchange settled, so a page refresh on
+      // /meta/callback — or any second delivery of the same code — replayed it
+      // and surfaced that error even though the account had connected fine.
+      // Hold a successful result briefly and replay it instead of Meta.
+      setTimeout(
+        () => this.metaOAuthExchanges.delete(exchangeKey),
+        META_OAUTH_REPLAY_WINDOW_MS,
+      ).unref?.();
+
+      return result;
+    } catch (err) {
+      // A genuine failure must stay retryable, so forget it immediately.
       this.metaOAuthExchanges.delete(exchangeKey);
+      throw err;
     }
   }
 

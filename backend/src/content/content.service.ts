@@ -36,6 +36,12 @@ export const POSTING_DAY_PATTERNS: Record<number, string[]> = {
 /** The weekdays used whenever no explicit day selection is supplied. */
 export const DEFAULT_POSTING_DAYS = POSTING_DAY_PATTERNS[3];
 
+/**
+ * Weeks generated the first time a business gets a calendar. Two weeks on the
+ * default three-posts-a-week plan is six posts.
+ */
+export const INITIAL_CALENDAR_WEEKS = 2;
+
 export interface ContentStrategyData {
   monthlyMarketingStrategy: string;
   monthlyCampaignFocus: string;
@@ -65,6 +71,9 @@ import { GraphicGeneratorService } from './graphic-generator.service';
 @Injectable()
 export class ContentService {
   private readonly logger = new Logger(ContentService.name);
+
+  /** Businesses whose deferred creatives are being produced right now. */
+  private readonly imageBackfillsInFlight = new Set<string>();
 
   constructor(
     private readonly firebase: FirebaseService,
@@ -507,7 +516,19 @@ export class ContentService {
    */
   async generateMonthlyCalendar(
     businessId: string,
-    options: { selectedDays?: string[]; durationWeeks?: number; industry?: string } = {},
+    options: {
+      selectedDays?: string[];
+      durationWeeks?: number;
+      industry?: string;
+      /**
+       * Save the posts first and produce their images afterwards, in the
+       * background. Each creative takes 20-60s to generate, so a six-post plan
+       * built inline keeps one HTTP request open for minutes and is killed by
+       * the host's request timeout long before it finishes — which is why an
+       * auto-generated calendar could come back empty.
+       */
+      deferImages?: boolean;
+    } = {},
   ) {
     // Default: 4-week calendar with 3 posts per week (Monday, Wednesday, Friday) = 12 posts
     const selectedDays =
@@ -627,22 +648,25 @@ export class ContentService {
           }
         }
 
-        // Small delay between creative generation to respect provider rate limits
-        if (createdEntries.length > 0) {
-          await new Promise((resolve) => setTimeout(resolve, 1200));
-        }
+        let generatedImageUrl = '';
+        if (!options.deferImages) {
+          // Small delay between creative generation to respect provider rate limits
+          if (createdEntries.length > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 1200));
+          }
 
-        // Generate personalized, composited AI marketing creative for this post
-        const generatedImageUrl = await this.generateAndCompositeImage(businessId, {
-          headline: post.headline,
-          caption: post.caption,
-          cta: post.cta,
-          category: post.category,
-          postType: post.postType,
-          objective: post.objective,
-          graphicPrompt: post.graphicPrompt,
-          topic: post.headline,
-        });
+          // Generate personalized, composited AI marketing creative for this post
+          generatedImageUrl = await this.generateAndCompositeImage(businessId, {
+            headline: post.headline,
+            caption: post.caption,
+            cta: post.cta,
+            category: post.category,
+            postType: post.postType,
+            objective: post.objective,
+            graphicPrompt: post.graphicPrompt,
+            topic: post.headline,
+          });
+        }
 
         const entryPayload = {
           businessId,
@@ -655,6 +679,9 @@ export class ContentService {
           caption: post.caption || `Discover what makes ${context.businessName} unique in ${context.industry}.`,
           imageOverlayText: post.imageOverlayText || post.headline || `Meet ${context.businessName}`,
           imageUrl: generatedImageUrl,
+          // Lets the calendar show "generating..." instead of an empty slot, and
+          // lets the background pass find the rows that still need a creative.
+          imagePending: !!options.deferImages,
           cta: post.cta || 'Learn More',
           hashtags: Array.isArray(post.hashtags) ? post.hashtags : [`#${(context.businessName || 'Brand').replace(/\s+/g, '')}`],
           graphicPrompt: post.graphicPrompt || `Creative promo visual for ${context.businessName}`,
@@ -704,6 +731,8 @@ export class ContentService {
     });
 
     if (upcomingEntries.length > 0) {
+      // Images may still be filling in from an earlier run that was cut short.
+      this.startImageBackfill(businessId);
       return {
         success: true,
         created: false,
@@ -714,11 +743,82 @@ export class ContentService {
 
     const selectedDays = await this.getPlanPostingDays(businessId);
 
+    // Two weeks, so a three-post plan opens with six posts rather than three.
+    // Images are deferred: the posts are saved and returned straight away, and
+    // the creatives are produced in the background afterwards.
     const result = await this.generateMonthlyCalendar(businessId, {
       selectedDays,
-      durationWeeks: 1,
+      durationWeeks: INITIAL_CALENDAR_WEEKS,
+      deferImages: true,
     });
+
+    this.startImageBackfill(businessId);
+
     return { ...result, created: true, selectedDays };
+  }
+
+  /**
+   * Produces the creatives for calendar rows saved without one, one at a time,
+   * without holding an HTTP request open. Fire-and-forget on purpose: the
+   * caller gets its posts immediately and each image appears as it is ready.
+   *
+   * Only one pass per business runs at a time, so repeated calendar opens
+   * cannot stack up duplicate image generation.
+   */
+  startImageBackfill(businessId: string): void {
+    if (!businessId || this.imageBackfillsInFlight.has(businessId)) return;
+    this.imageBackfillsInFlight.add(businessId);
+
+    void this.backfillCalendarImages(businessId)
+      .catch((err: any) =>
+        this.logger.error(
+          `[ContentService] Image backfill failed for ${businessId}: ${err.message}`,
+        ),
+      )
+      .finally(() => this.imageBackfillsInFlight.delete(businessId));
+  }
+
+  private async backfillCalendarImages(businessId: string): Promise<void> {
+    const entries = await this.firebase.getContentCalendarByBusinessId(businessId);
+    const pending = (entries || []).filter((e: any) => !e?.imageUrl);
+
+    if (!pending.length) return;
+    this.logger.log(
+      `[ContentService] Backfilling ${pending.length} calendar creative(s) for ${businessId}`,
+    );
+
+    for (const entry of pending) {
+      try {
+        const imageUrl = await this.generateAndCompositeImage(businessId, {
+          headline: entry.headline,
+          caption: entry.caption,
+          cta: entry.cta,
+          category: entry.category,
+          postType: entry.postType,
+          objective: entry.objective,
+          graphicPrompt: entry.graphicPrompt,
+          topic: entry.headline,
+        });
+
+        await this.firebase.updateContentCalendarEntry(entry.id, {
+          imageUrl,
+          imagePending: false,
+        });
+      } catch (err: any) {
+        // One failed creative must not stop the rest of the plan.
+        this.logger.warn(
+          `[ContentService] Could not backfill creative for entry ${entry.id}: ${err.message}`,
+        );
+        await this.firebase
+          .updateContentCalendarEntry(entry.id, { imagePending: false })
+          .catch(() => undefined);
+      }
+
+      // Space the provider calls out so a six-post plan does not trip rate limits.
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+
+    this.logger.log(`[ContentService] Image backfill complete for ${businessId}`);
   }
 
   /**
