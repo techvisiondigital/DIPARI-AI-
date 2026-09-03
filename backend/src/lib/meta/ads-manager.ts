@@ -24,6 +24,16 @@ export interface MetaCampaignLaunchInput {
   imageUrl?: string;
   status?: 'PAUSED' | 'ACTIVE';
   isMock?: boolean;
+  /**
+   * Instant Form to open when someone taps the ad. REQUIRED for a lead
+   * campaign: without it Meta serves an ordinary link ad, the person never
+   * sees a form, and no lead is ever generated.
+   */
+  leadGenFormId?: string;
+  /** Instagram Business account, so the ad is eligible for Instagram placements. */
+  instagramActorId?: string;
+  /** Where the ad may appear. Defaults to Facebook + Instagram. */
+  publisherPlatforms?: string[];
 }
 
 export interface MetaCampaignLaunchResult {
@@ -33,6 +43,7 @@ export interface MetaCampaignLaunchResult {
   metaCreativeId: string;
   metaAdId: string;
   imageHash?: string;
+  leadGenFormId?: string;
   status: string;
   error?: string;
 }
@@ -194,6 +205,9 @@ export async function launchFullMetaCampaignHierarchy(
     imageUrl,
     status = 'PAUSED',
     isMock = false,
+    leadGenFormId,
+    instagramActorId,
+    publisherPlatforms,
   } = input;
 
   const formattedAdAccountId = formatAdAccountId(adAccountId);
@@ -262,6 +276,13 @@ export async function launchFullMetaCampaignHierarchy(
     targetingSpecObj.genders = genders;
   }
 
+  // Run on Facebook and Instagram unless the caller narrows it. Leaving this
+  // unset lets Meta pick placements on its own, which is why campaigns did not
+  // reliably appear on Instagram.
+  targetingSpecObj.publisher_platforms = publisherPlatforms?.length
+    ? publisherPlatforms
+    : ['facebook', 'instagram'];
+
   if (interestList.length > 0) {
     // Resolve names to genuine Meta targeting IDs — fabricated IDs are rejected.
     const resolvedInterests = await resolveAdInterestIds(interestList, accessToken);
@@ -284,6 +305,8 @@ export async function launchFullMetaCampaignHierarchy(
 
   if (metaObjective === 'OUTCOME_LEADS') {
     adSetPayload.promoted_object = { page_id: pageId };
+    // Tells Meta the form opens inside the ad rather than sending traffic away.
+    adSetPayload.destination_type = 'ON_AD';
   }
 
   const adSetRes = await axios.post(
@@ -295,21 +318,43 @@ export async function launchFullMetaCampaignHierarchy(
 
   // Step C: Create Ad Creative (image already uploaded in Step 0)
   // POST https://graph.facebook.com/<version>/act_<AD_ACCOUNT_ID>/adcreatives
+  const isLeadCampaign = metaObjective === 'OUTCOME_LEADS';
+
+  if (isLeadCampaign && !leadGenFormId) {
+    // Without a form this silently becomes a plain link ad: the campaign
+    // spends budget, nobody is ever shown a form, and no lead is created.
+    // Better to stop here than to hand the customer a lead campaign that
+    // cannot produce leads.
+    throw new Error(
+      'A lead generation campaign needs an Instant Form. None could be created or found for this Page.',
+    );
+  }
+
+  const callToAction: any = {
+    type: isLeadCampaign ? ctaType || 'SIGN_UP' : ctaType || 'LEARN_MORE',
+  };
+  if (isLeadCampaign) {
+    // This is what makes the form open when someone taps the ad.
+    callToAction.value = { lead_gen_form_id: leadGenFormId };
+  }
+
   const creativePayload: any = {
     name: `${campaignName} - Creative`,
     object_story_spec: {
       page_id: pageId,
+      // Required for the ad to be eligible for Instagram placements.
+      ...(instagramActorId ? { instagram_actor_id: instagramActorId } : {}),
       link_data: {
-        link: 'https://www.facebook.com',
+        // A lead ad's link is a formality — the form opens in place — but Meta
+        // still requires the field.
+        link: isLeadCampaign ? 'http://fb.me/' : 'https://www.facebook.com',
         message: primaryText,
         name: headline,
         description: description || '',
         // Meta rejects an empty image_hash, so omit the field entirely when
         // there is no creative image rather than sending a blank value.
         ...(imageHash ? { image_hash: imageHash } : {}),
-        call_to_action: {
-          type: ctaType || 'LEARN_MORE',
-        },
+        call_to_action: callToAction,
       },
     },
   };
@@ -342,6 +387,7 @@ export async function launchFullMetaCampaignHierarchy(
     metaCreativeId,
     metaAdId,
     imageHash,
+    leadGenFormId,
     status,
   };
 }

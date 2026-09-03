@@ -1282,6 +1282,31 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
   }
 
   /**
+   * Resolves a Page's own access token from the user token.
+   *
+   * Several Page-level Graph endpoints — subscribing to webhooks, creating a
+   * lead form — are rejected outright when called with a user token, so this
+   * must be used instead of `business.metaAccessToken` for those calls.
+   */
+  async getPageAccessToken(userToken: string, pageId: string): Promise<string | null> {
+    try {
+      const res = await axios.get(`${GRAPH_API_BASE}/me/accounts`, {
+        params: { access_token: userToken, fields: 'id,access_token', limit: 200 },
+        timeout: 15_000,
+      });
+      const page = (res.data?.data || []).find((p: any) => String(p.id) === String(pageId));
+      return page?.access_token || null;
+    } catch (err: any) {
+      this.logger.warn(
+        `[Meta] Could not resolve a Page access token for ${pageId}: ${
+          err?.response?.data?.error?.message || err.message
+        }`,
+      );
+      return null;
+    }
+  }
+
+  /**
    * Subscribes the app to this Page's `leadgen` webhook field, so Meta pushes
    * new lead-form submissions to our webhook endpoint.
    *
@@ -1311,12 +1336,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       }
 
       // A Page subscription must be made with that Page's own token.
-      const pagesRes = await axios.get(`${GRAPH_API_BASE}/me/accounts`, {
-        params: { access_token: userToken, fields: 'id,access_token', limit: 200 },
-        timeout: 15_000,
-      });
-      const page = (pagesRes.data?.data || []).find((p: any) => String(p.id) === String(pageId));
-      const pageToken = page?.access_token;
+      const pageToken = await this.getPageAccessToken(userToken, pageId);
 
       if (!pageToken) {
         return {
@@ -1463,11 +1483,28 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
         };
 
         // Add promoted_object for LEAD_GENERATION
-        if (objective === 'LEAD_GENERATION') {
+        let leadGenFormId: string | null = null;
+        if (metaObjective === 'OUTCOME_LEADS') {
           adSetPayload.promoted_object = {
             page_id: pageId,
           };
+          // The form opens inside the ad instead of sending traffic off-site.
+          adSetPayload.destination_type = 'ON_AD';
+
+          // A lead campaign is only a lead campaign once a form is attached to
+          // the creative. Build or reuse one now, before anything is created on
+          // the customer's ad account.
+          leadGenFormId = await this.ensureLeadFormForBusiness(businessId!);
+          if (!leadGenFormId) {
+            throw new Error(
+              'Could not create an Instant Form for this Page, so a lead generation campaign cannot be launched. ' +
+                'Reconnect Meta and make sure your Facebook Page is selected.',
+            );
+          }
         }
+
+        // Run on Facebook and Instagram rather than letting Meta choose.
+        adSetPayload.targeting.publisher_platforms = ['facebook', 'instagram'];
 
         this.logger.log(`Creating ad set for campaign ${metaCampaignId}`);
         const adSetRes = await axios.post(
@@ -1484,18 +1521,31 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
         const description = creative?.description || '';
         const cta = objective === 'LEAD_GENERATION' ? 'SIGN_UP' : 'LEARN_MORE';
 
+        const igActorId = business?.selectedInstagramAccountId || business?.metaIgBusinessAccountId;
+
+        const callToAction: any = { type: cta };
+        if (leadGenFormId) {
+          // Without this the ad is an ordinary link ad — no form ever opens,
+          // and the campaign cannot produce a single lead.
+          callToAction.value = { lead_gen_form_id: leadGenFormId };
+        }
+
         const creativePayload: any = {
           name: `${campaignName} - Creative`,
           object_story_spec: {
             page_id: pageId,
+            // Required for the ad to be eligible for Instagram placements.
+            ...(igActorId ? { instagram_actor_id: igActorId } : {}),
             link_data: {
-              link: 'https://www.example.com',
+              // Was 'https://www.example.com' — a placeholder that shipped to
+              // real ad accounts and sent every click to a dead page.
+              link: leadGenFormId
+                ? 'http://fb.me/'
+                : business?.websiteUrl || (process.env.FRONTEND_URL || 'https://visionpilotai.techvisiondigital.in'),
               message: primaryText,
               name: headline,
               description: description,
-              call_to_action: {
-                type: cta,
-              },
+              call_to_action: callToAction,
             },
           },
         };
@@ -1567,12 +1617,31 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       );
     }
 
+    // A lead campaign must carry an Instant Form, so build or reuse one before
+    // anything is created on the customer's ad account.
+    const requestedObjective = String(campaignPayload.objective || 'OUTCOME_SALES');
+    const wantsLeads = /LEAD/i.test(requestedObjective);
+    let leadGenFormId: string | null = null;
+    if (wantsLeads) {
+      leadGenFormId = await this.ensureLeadFormForBusiness(businessId);
+      if (!leadGenFormId) {
+        throw new HttpException(
+          'Could not create an Instant Form for your Facebook Page, so this lead generation campaign cannot run. ' +
+            'Reconnect Meta and make sure a Page is selected.',
+          HttpStatus.BAD_GATEWAY,
+        );
+      }
+      this.logger.log(`[Meta] Lead campaign for ${businessId} will use Instant Form ${leadGenFormId}`);
+    }
+
     let launchResult: Awaited<ReturnType<typeof launchFullMetaCampaignHierarchy>>;
     try {
       launchResult = await launchFullMetaCampaignHierarchy({
       adAccountId,
       pageId,
       accessToken,
+      leadGenFormId: leadGenFormId || undefined,
+      instagramActorId: business?.selectedInstagramAccountId || business?.metaIgBusinessAccountId || undefined,
       campaignName: campaignPayload.campaignName || campaignPayload.name || 'AI Generated Meta Campaign',
       objective: campaignPayload.objective || 'OUTCOME_SALES',
       dailyBudget: campaignPayload.dailyBudget || campaignPayload.budget || 500,
@@ -1886,46 +1955,143 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
   // ─── Meta Lead Ads ────────────────────────────────────────────────────────────
 
+  /**
+   * Default questions for a generated lead form. Meta's own prefill types mean
+   * the person barely types anything — the fields arrive already filled from
+   * their Facebook profile.
+   */
+  private defaultLeadFormQuestions() {
+    return [
+      { type: 'FULL_NAME' },
+      { type: 'EMAIL' },
+      { type: 'PHONE' },
+    ];
+  }
+
+  /**
+   * Meta requires a reachable privacy policy URL on every lead form and rejects
+   * the form without one. This used to be the literal string
+   * 'https://example.com/privacy', which is not the business's policy and is
+   * exactly the kind of thing Meta blocks.
+   */
+  private resolveLeadFormUrls(business: any): { privacyUrl: string; followUpUrl: string } {
+    const appUrl = (process.env.FRONTEND_URL || 'https://visionpilotai.techvisiondigital.in').replace(/\/$/, '');
+    const site = String(business?.websiteUrl || business?.website || '').trim().replace(/\/$/, '');
+    const base = /^https?:\/\//i.test(site) ? site : appUrl;
+    return { privacyUrl: `${base}/privacy`, followUpUrl: base };
+  }
+
   async createLeadForm(businessId: string, formName: string, questions: any[]) {
     this.logger.log(`Creating Lead Form: ${formName}. Mock: ${this.isMock}`);
 
-    if (!this.isMock && businessId) {
-      try {
-        const business = await this.firebase.getBusinessById(businessId);
-        const accessToken = business?.metaAccessToken;
-        const pageId = business?.selectedPageId || business?.metaPageId;
-
-        if (!accessToken || !pageId) {
-          throw new Error('Meta Access Token or Page ID not configured.');
-        }
-
-        const res = await axios.post(
-          `${GRAPH_API_BASE}/${pageId}/leadgen_forms`,
-          {
-            name: formName,
-            questions: questions.map(q => ({
-              type: q.type,
-              key: q.key,
-              label: q.label,
-            })),
-            privacy_policy: {
-              url: 'https://example.com/privacy',
-            },
-            follow_up_action_url: 'https://example.com/thanks',
-          },
-          { params: { access_token: accessToken } },
-        );
-        return { success: true, formId: res.data.id };
-      } catch (err: any) {
-        this.logger.error('Failed to create lead form', err.response?.data || err.message);
-        throw new HttpException(
-          err.response?.data?.error?.message || 'Failed to create lead form on Meta',
-          HttpStatus.BAD_GATEWAY,
-        );
-      }
+    if (this.isMock || !businessId) {
+      return { success: true, formId: `form_${Math.floor(1000000 + Math.random() * 9000000)}` };
     }
 
-    return { success: true, formId: `form_${Math.floor(1000000 + Math.random() * 9000000)}` };
+    const business = await this.firebase.getBusinessById(businessId);
+    const userToken = business?.metaAccessToken;
+    const pageId = business?.selectedPageId || business?.metaPageId;
+
+    if (!userToken || !pageId) {
+      throw new HttpException(
+        'Meta is not connected for this business. Connect Meta and select a Facebook Page first.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // A lead form belongs to the Page, so Meta requires the PAGE token here.
+    // Sending the user token made this call fail every time.
+    const pageToken = await this.getPageAccessToken(userToken, pageId);
+    if (!pageToken) {
+      throw new HttpException(
+        `No Page access token is available for Page ${pageId}. Reconnect Meta and grant access to this Page.`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const { privacyUrl, followUpUrl } = this.resolveLeadFormUrls(business);
+    const formQuestions = (questions && questions.length ? questions : this.defaultLeadFormQuestions()).map(
+      (q: any) => {
+        const built: any = { type: q.type };
+        if (q.key) built.key = q.key;
+        if (q.label) built.label = q.label;
+        return built;
+      },
+    );
+
+    try {
+      const res = await axios.post(
+        `${GRAPH_API_BASE}/${pageId}/leadgen_forms`,
+        {
+          name: formName,
+          questions: formQuestions,
+          privacy_policy: { url: privacyUrl, link_text: 'Privacy Policy' },
+          follow_up_action_url: followUpUrl,
+          locale: 'en_US',
+        },
+        { params: { access_token: pageToken }, timeout: 20_000 },
+      );
+
+      const formId = res.data?.id;
+      this.logger.log(`[Meta] Lead form ${formId} created on Page ${pageId}`);
+
+      // Remember it so campaigns can attach it without another round trip.
+      await this.firebase
+        .updateBusiness(businessId, { metaLeadFormId: formId, metaLeadFormName: formName })
+        .catch(() => undefined);
+
+      return { success: true, formId };
+    } catch (err: any) {
+      const detail = err?.response?.data?.error?.error_user_msg || err?.response?.data?.error?.message || err.message;
+      this.logger.error(`[Meta] Failed to create lead form on Page ${pageId}: ${detail}`);
+      throw new HttpException(detail || 'Failed to create lead form on Meta', HttpStatus.BAD_GATEWAY);
+    }
+  }
+
+  /**
+   * Returns a usable lead form for this business, creating one from its own
+   * details if none exists yet.
+   *
+   * A lead ad is only a lead ad when a form is attached to its creative, so
+   * every lead-generation launch runs through here. The business owner never
+   * has to build a form in Meta's own tools.
+   */
+  async ensureLeadFormForBusiness(businessId: string): Promise<string | null> {
+    if (this.isMock) return 'mock_lead_form_id';
+
+    const business = await this.firebase.getBusinessById(businessId);
+    const userToken = business?.metaAccessToken;
+    const pageId = business?.selectedPageId || business?.metaPageId;
+    if (!userToken || !pageId) return null;
+
+    // 1. Already generated for this business.
+    if (business?.metaLeadFormId) {
+      return business.metaLeadFormId;
+    }
+
+    // 2. An active form already on the Page — reuse rather than pile up new ones.
+    try {
+      const pageToken = (await this.getPageAccessToken(userToken, pageId)) || userToken;
+      const existing = await axios.get(`${GRAPH_API_BASE}/${pageId}/leadgen_forms`, {
+        params: { access_token: pageToken, fields: 'id,name,status', limit: 50 },
+        timeout: 15_000,
+      });
+      const active = (existing.data?.data || []).find((f: any) => f.status === 'ACTIVE') || existing.data?.data?.[0];
+      if (active?.id) {
+        await this.firebase
+          .updateBusiness(businessId, { metaLeadFormId: active.id, metaLeadFormName: active.name })
+          .catch(() => undefined);
+        this.logger.log(`[Meta] Reusing existing lead form ${active.id} on Page ${pageId}`);
+        return active.id;
+      }
+    } catch (err: any) {
+      this.logger.warn(`[Meta] Could not list existing lead forms for Page ${pageId}: ${err.message}`);
+    }
+
+    // 3. Nothing usable — build one from the business's own name.
+    const name = `${business?.name || business?.businessName || 'VisionPilot'} - Enquiries`;
+    const created = await this.createLeadForm(businessId, name, this.defaultLeadFormQuestions());
+    return created?.formId || null;
   }
 
   async processLeadWebhook(entry: any) {
