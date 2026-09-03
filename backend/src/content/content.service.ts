@@ -1380,9 +1380,19 @@ Return ONLY valid JSON (no markdown, no code fences):
     // Determine overall success
     const isSuccess = Object.values(results).some((r: any) => r?.success !== false);
 
-    // Update entry status to PUBLISHED
+    // Update entry status to PUBLISHED. This intentionally bypasses
+    // editPost/validateStatusTransition: that guard protects manual edits
+    // from illegal jumps (e.g. someone directly setting DRAFT -> PUBLISHED
+    // with nothing actually posted), but "Post Now" is meant to work from
+    // any status — including DRAFT — and by this point Meta has already
+    // confirmed the post went out. Routing through the generic transition
+    // check meant a perfectly successful Facebook/Instagram publish still
+    // threw "Invalid status transition from 'DRAFT' to 'PUBLISHED'", the
+    // entry stayed stuck on its old status, and the UI showed "Post Failed"
+    // for a post that was, in fact, already live — inviting a retry that
+    // would have posted the same caption to the Page a second time.
     if (isSuccess) {
-      await this.editPost(id, { status: 'PUBLISHED', publishedAt: new Date() }, user);
+      await this.markCalendarEntryPublishedNow(id, entry);
     }
 
     await this.firebase.createCalendarAuditTrail({
@@ -1400,6 +1410,21 @@ Return ONLY valid JSON (no markdown, no code fences):
       platform,
       results,
     };
+  }
+
+  /**
+   * Flips a calendar entry straight to PUBLISHED once Meta has confirmed the
+   * post actually went out — see the comment in postNow for why this skips
+   * validateStatusTransition rather than going through editPost.
+   */
+  private async markCalendarEntryPublishedNow(id: string, entry: any) {
+    const now = new Date();
+    return this.firebase.runTransaction(async (tx) => {
+      const docRef = this.firebase.col('contentCalendar').doc(id);
+      const updatePayload = { status: 'PUBLISHED', publishedAt: now, updatedAt: now };
+      await tx.update(docRef, updatePayload);
+      return { ...entry, ...updatePayload };
+    });
   }
 
   async regenerateCalendarEntry(id: string) {
