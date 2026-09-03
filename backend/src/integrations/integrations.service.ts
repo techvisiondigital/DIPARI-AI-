@@ -9,6 +9,9 @@ import { GRAPH_API_BASE, FACEBOOK_DIALOG_BASE } from '../lib/meta/graph-version'
 /** Window during which a completed Meta OAuth exchange is replayed. */
 const META_OAUTH_REPLAY_WINDOW_MS = 10 * 60 * 1000;
 
+/** How long saving the account selection will wait for the webhook subscription. */
+const META_SUBSCRIBE_DEADLINE_MS = 12_000;
+
 dotenv.config();
 
 @Injectable()
@@ -1253,12 +1256,27 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     // subscribed. Without this the whole lead pipeline is silently dead: the
     // webhook handler, the CRM and the lead-assistant were all built and wired,
     // but Meta was never told to send anything, so no lead ever arrived.
-    const subscription = await this.subscribePageToLeadgen(businessId, data.pageId);
+    //
+    // Saving the selection must never wait on Meta, though. Awaiting this
+    // directly left the Save button spinning with no feedback whenever the
+    // Graph API was slow. Race it against a short deadline: the common case
+    // reports a real result, and a slow call carries on in the background
+    // instead of holding up the user.
+    const subscription = await Promise.race([
+      this.subscribePageToLeadgen(businessId, data.pageId),
+      new Promise<{ subscribed: boolean; error?: string; pending?: boolean }>((resolve) =>
+        setTimeout(
+          () => resolve({ subscribed: false, pending: true, error: 'Still being set up.' }),
+          META_SUBSCRIBE_DEADLINE_MS,
+        ).unref?.(),
+      ),
+    ]);
 
     return {
       success: true,
       message: 'Meta accounts configured successfully',
       leadWebhookSubscribed: subscription.subscribed,
+      leadWebhookPending: (subscription as any).pending || false,
       leadWebhookError: subscription.error,
     };
   }
@@ -1295,6 +1313,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       // A Page subscription must be made with that Page's own token.
       const pagesRes = await axios.get(`${GRAPH_API_BASE}/me/accounts`, {
         params: { access_token: userToken, fields: 'id,access_token', limit: 200 },
+        timeout: 15_000,
       });
       const page = (pagesRes.data?.data || []).find((p: any) => String(p.id) === String(pageId));
       const pageToken = page?.access_token;
@@ -1309,7 +1328,10 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       const res = await axios.post(
         `${GRAPH_API_BASE}/${pageId}/subscribed_apps`,
         null,
-        { params: { subscribed_fields: 'leadgen', access_token: pageToken } },
+        {
+          params: { subscribed_fields: 'leadgen', access_token: pageToken },
+          timeout: 15_000,
+        },
       );
 
       if (res.data?.success) {
