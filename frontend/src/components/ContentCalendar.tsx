@@ -153,7 +153,21 @@ export const ContentCalendar: React.FC<ContentCalendarProps> = ({ businessId, on
           isSchedulerPost: true,
         }));
 
-      const merged = [...calendarList, ...normalizedScheduled];
+      // One post per day. The calendar and the scheduler are two separate
+      // stores and both can hold a post for the same date, so merging them
+      // blindly showed the same day twice — which is what made a
+      // three-posts-a-week plan look like it had two posts on one day.
+      // Calendar entries win, because they carry the generated creative.
+      const merged: any[] = [];
+      const claimedDays = new Set<string>();
+      for (const entry of [...calendarList, ...normalizedScheduled]) {
+        const when = parseEntryDate(entry);
+        const dayKey = when ? when.toDateString() : `no-date-${entry.id}`;
+        if (claimedDays.has(dayKey)) continue;
+        claimedDays.add(dayKey);
+        merged.push(entry);
+      }
+
       setCalendarEntries(merged);
       return merged;
     } catch (err: any) {

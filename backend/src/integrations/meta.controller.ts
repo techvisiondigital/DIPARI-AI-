@@ -118,12 +118,25 @@ export class MetaPublicController {
 
   @Post('webhooks/leads')
   async handleWebhook(@Body() body: any) {
+    // Every delivery is logged. Without this the endpoint was completely
+    // silent, so there was no way to tell a webhook Meta never sent from one
+    // that arrived and was dropped — which is exactly the question you need
+    // answered when leads are not showing up.
+    const fields = (body?.entry || [])
+      .flatMap((e: any) => (e?.changes || []).map((c: any) => c?.field))
+      .filter(Boolean);
+    this.logger.log(
+      `[Meta webhook] Received object=${body?.object} entries=${(body?.entry || []).length} fields=[${fields.join(', ')}]`,
+    );
+
     if (body.object === 'page') {
       for (const entry of body.entry || []) {
         await this.integrationsService.processLeadWebhook(entry);
       }
       return 'EVENT_RECEIVED';
     }
+
+    this.logger.warn(`[Meta webhook] Ignoring delivery for object="${body?.object}" (expected "page")`);
     throw new HttpException('Not Found', HttpStatus.NOT_FOUND);
   }
 }

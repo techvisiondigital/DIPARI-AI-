@@ -679,15 +679,28 @@ export class FirebaseService implements OnModuleInit {
    *
    * Requires single-field index on businesses.metaPageId (created automatically).
    */
+  /**
+   * Finds the business connected to a Facebook Page.
+   *
+   * The selected Page is stored under BOTH `metaPageId` and `selectedPageId`,
+   * and older records may carry only one of them. Checking a single field meant
+   * an incoming lead for a Page recorded under the other name was reported as
+   * "unknown page" and silently dropped.
+   */
   async getBusinessByMetaPageId(pageId: string) {
     if (!pageId) return null;
-    const snap = await this.col('businesses')
-      .where('metaPageId', '==', pageId)
-      .limit(1)
-      .get();
-    if (snap.empty) return null;
-    const doc = snap.docs[0];
-    return { id: doc.id, ...doc.data() } as any;
+
+    for (const field of ['metaPageId', 'selectedPageId']) {
+      const snap = await this.col('businesses')
+        .where(field, '==', pageId)
+        .limit(1)
+        .get();
+      if (!snap.empty) {
+        const doc = snap.docs[0];
+        return { id: doc.id, ...doc.data() } as any;
+      }
+    }
+    return null;
   }
 
   /**

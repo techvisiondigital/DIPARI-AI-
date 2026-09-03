@@ -93,6 +93,12 @@ export interface BrandedGraphicOptions {
   };
   brandColors?: string[];
   bgImageUrl?: string;
+  /**
+   * Distinguishes one post's artwork from another's. Without it every post in
+   * a plan whose AI background failed rendered the exact same flat gradient,
+   * so a week of posts looked like six copies of one image.
+   */
+  variantSeed?: string;
   bgImageBuffer?: Buffer;
   aspectRatio?: '1:1' | '4:5' | '9:16';
 }
@@ -274,6 +280,227 @@ export class GraphicGeneratorService {
    * 4. 3D CTA Button
    * 5. Contact Details Footer Bar
    */
+  /** Stable small integer from a string, so a given post always looks the same. */
+  private seedFrom(value: string): number {
+    let h = 0;
+    for (let i = 0; i < value.length; i++) {
+      h = (h * 31 + value.charCodeAt(i)) >>> 0;
+    }
+    return h;
+  }
+
+  /**
+   * Draws the background used when no AI visual is available.
+   *
+   * This used to be one fixed gradient plus one centred glow, identical for
+   * every post, which is why a generated plan looked like the same picture
+   * repeated. The seed picks a different composition, gradient direction and
+   * accent geometry per post, so a week of posts reads as a set rather than a
+   * duplicate.
+   */
+  private drawDesignedBackground(
+    ctx: any,
+    width: number,
+    height: number,
+    palette: VibePalette,
+    seedText: string,
+  ): void {
+    // Unsigned shifts throughout: `>>` on a uint32 above 2^31 returns a
+    // negative number, which then indexes out of these tables.
+    const seed = this.seedFrom(seedText || 'visionpilot');
+    const variant = seed % 5;
+    const angle = (seed >>> 3) % 4;
+
+    // Gradient direction varies so two posts never share the same wash.
+    const coords: [number, number, number, number][] = [
+      [0, 0, width, height],
+      [width, 0, 0, height],
+      [0, height, width, 0],
+      [width / 2, 0, width / 2, height],
+    ];
+    const [x0, y0, x1, y1] = coords[angle];
+    const bg = ctx.createLinearGradient(x0, y0, x1, y1);
+    bg.addColorStop(0, palette.bgStart);
+    bg.addColorStop(1, palette.bgEnd);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.save();
+
+    if (variant === 0) {
+      // Soft off-centre glow.
+      const cx = width * (0.25 + ((seed >>> 5) % 50) / 100);
+      const cy = height * 0.35;
+      const aura = ctx.createRadialGradient(cx, cy, 40, cx, cy, width * 0.75);
+      aura.addColorStop(0, palette.accent + '55');
+      aura.addColorStop(1, 'transparent');
+      ctx.fillStyle = aura;
+      ctx.fillRect(0, 0, width, height);
+    } else if (variant === 1) {
+      // Diagonal ribbons.
+      ctx.globalAlpha = 0.14;
+      ctx.fillStyle = palette.accent;
+      const band = width / 9;
+      for (let i = -1; i < 12; i += 2) {
+        ctx.save();
+        ctx.translate(i * band, 0);
+        ctx.rotate((22 * Math.PI) / 180);
+        ctx.fillRect(0, -height, band, height * 3);
+        ctx.restore();
+      }
+    } else if (variant === 2) {
+      // Concentric arcs radiating from a corner.
+      ctx.globalAlpha = 0.18;
+      ctx.strokeStyle = palette.accent;
+      ctx.lineWidth = 14;
+      const ox = seed % 2 === 0 ? 0 : width;
+      for (let r = width * 0.25; r < width * 1.5; r += width * 0.14) {
+        ctx.beginPath();
+        ctx.arc(ox, height, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    } else if (variant === 3) {
+      // Scattered dot field.
+      ctx.globalAlpha = 0.2;
+      ctx.fillStyle = palette.accent;
+      let n = seed;
+      for (let i = 0; i < 90; i++) {
+        n = (n * 1103515245 + 12345) >>> 0;
+        const px = (n % width);
+        const py = ((n >>> 8) % height);
+        const pr = 4 + ((n >>> 16) % 14);
+        ctx.beginPath();
+        ctx.arc(px, py, pr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      // Large translucent blobs.
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = palette.accent;
+      let n = seed;
+      for (let i = 0; i < 3; i++) {
+        n = (n * 1103515245 + 12345) >>> 0;
+        const cx = n % width;
+        const cy = (n >>> 9) % height;
+        const rr = width * (0.22 + ((n >>> 18) % 20) / 100);
+        ctx.beginPath();
+        ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+
+    // Keep the lower half dark enough for the copy to stay readable.
+    const legibility = ctx.createLinearGradient(0, height * 0.4, 0, height);
+    legibility.addColorStop(0, 'transparent');
+    legibility.addColorStop(1, 'rgba(15, 23, 42, 0.85)');
+    ctx.fillStyle = legibility;
+    ctx.fillRect(0, height * 0.4, width, height * 0.6);
+  }
+
+  /**
+   * Fills the area a product photograph would have occupied: an oversized
+   * monogram watermark with the offer set large across it.
+   */
+  private drawHeroStatement(
+    ctx: any,
+    width: number,
+    height: number,
+    palette: VibePalette,
+    data: BrandedGraphicOptions,
+  ): void {
+    const top = height * 0.17;
+    const bottom = height * 0.47;
+    const midY = (top + bottom) / 2;
+
+    // Monogram watermark from the business initials.
+    const initials = String(data.businessName || 'VP')
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0])
+      .join('')
+      .toUpperCase();
+
+    ctx.save();
+    ctx.globalAlpha = 0.1;
+    ctx.fillStyle = palette.textColor;
+    ctx.font = font(`bold ${Math.round(height * 0.3)}px`);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(initials, width / 2, midY);
+    ctx.restore();
+
+    const statement = String(data.offerText || data.headline || '').trim();
+    if (!statement) return;
+
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Shrink until the line fits, then wrap to at most two lines.
+    let size = Math.round(height * 0.075);
+    let lines: string[] = [];
+    const maxWidth = width * 0.78;
+    while (size > 26) {
+      ctx.font = font(`bold ${size}px`);
+      lines = this.wrapToLines(ctx, statement, maxWidth, 2);
+      if (lines.length <= 2 && lines.every((l) => ctx.measureText(l).width <= maxWidth)) break;
+      size -= 4;
+    }
+
+    const lineHeight = size * 1.2;
+    const startY = midY - ((lines.length - 1) * lineHeight) / 2;
+
+    ctx.shadowColor = 'rgba(0,0,0,0.55)';
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = palette.textColor;
+    lines.forEach((line, i) => ctx.fillText(line, width / 2, startY + i * lineHeight));
+
+    // Accent rule under the statement.
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = palette.accent;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    const ruleY = startY + (lines.length - 1) * lineHeight + size * 0.85;
+    ctx.moveTo(width / 2 - 70, ruleY);
+    ctx.lineTo(width / 2 + 70, ruleY);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** Greedy word wrap capped at `maxLines`, with an ellipsis if it overflows. */
+  private wrapToLines(ctx: any, text: string, maxWidth: number, maxLines: number): string[] {
+    const words = text.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let current = '';
+
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (ctx.measureText(candidate).width <= maxWidth) {
+        current = candidate;
+      } else {
+        if (current) lines.push(current);
+        current = word;
+        if (lines.length === maxLines) break;
+      }
+    }
+    if (current && lines.length < maxLines) lines.push(current);
+
+    if (lines.length === maxLines) {
+      const consumed = lines.join(' ').split(/\s+/).length;
+      if (consumed < words.length) {
+        let last = lines[maxLines - 1];
+        while (last.length > 4 && ctx.measureText(`${last}…`).width > maxWidth) {
+          last = last.slice(0, -1);
+        }
+        lines[maxLines - 1] = `${last}…`;
+      }
+    }
+    return lines.length ? lines : [text];
+  }
+
   async generateBrandedGraphicBuffer(data: BrandedGraphicOptions): Promise<Buffer> {
     let width = 1080;
     let height = 1080;
@@ -330,19 +557,11 @@ export class GraphicGeneratorService {
     }
 
     if (!aiVisualLoaded) {
-      // Fallback base gradient
-      const bgGradient = ctx.createLinearGradient(0, 0, width, height);
-      bgGradient.addColorStop(0, palette.bgStart);
-      bgGradient.addColorStop(1, palette.bgEnd);
-      ctx.fillStyle = bgGradient;
-      ctx.fillRect(0, 0, width, height);
-
-      // Radial glowing aura
-      const aura = ctx.createRadialGradient(width / 2, height / 2, 50, width / 2, height / 2, 480);
-      aura.addColorStop(0, palette.accent + '44');
-      aura.addColorStop(1, 'transparent');
-      ctx.fillStyle = aura;
-      ctx.fillRect(0, 0, width, height);
+      this.drawDesignedBackground(ctx, width, height, palette, data.variantSeed || data.headline || data.offerText || '');
+      // With no product photograph the upper half is dead space. Fill it with
+      // the offer as a display line over the business monogram so the post
+      // still reads as a designed piece rather than an empty frame.
+      this.drawHeroStatement(ctx, width, height, palette, data);
     }
 
     // 2. Frame Border Accent

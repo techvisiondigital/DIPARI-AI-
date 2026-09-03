@@ -154,6 +154,8 @@ export class ContentService {
         logoUrl: ctx.logoUrl,
         brandColors: ctx.brandColors,
         bgImageUrl,
+        // Makes each post's artwork distinct when no AI background is available.
+        variantSeed: `${postDetails.headline || ''}|${postDetails.category || ''}|${postDetails.topic || ''}`,
         phone: ctx.contactPhone,
         email: ctx.contactEmail,
         website: ctx.websiteUrl,
@@ -562,6 +564,21 @@ export class ContentService {
     };
 
     const createdEntries: any[] = [];
+
+    // Dates that already hold a post for this business. Generating a plan used
+    // to append blindly, so running it twice stacked a second post onto every
+    // date that already had one — which is why a "3 posts a week" calendar
+    // showed two posts on the same day.
+    const existingForBusiness = await this.firebase.getContentCalendarByBusinessId(businessId);
+    const occupiedDates = new Set<string>(
+      (existingForBusiness || [])
+        .map((e: any) => {
+          const d = e.scheduledTime?.toDate?.() || new Date(e.scheduledTime);
+          return Number.isNaN(d?.getTime?.()) ? null : d.toDateString();
+        })
+        .filter(Boolean) as string[],
+    );
+
     const postTypesList = ['Reel', 'Carousel', 'Image', 'Video', 'Story'];
     const categoriesList = [
       'Educational', 'Promotional', 'Brand Awareness', 'Customer Story',
@@ -647,6 +664,14 @@ export class ContentService {
             scheduledTime.setHours(hours, minutes, 0, 0);
           }
         }
+
+        if (occupiedDates.has(scheduledTime.toDateString())) {
+          this.logger.log(
+            `[ContentService] ${scheduledTime.toDateString()} already has a post for ${businessId}; skipping to keep one post per day.`,
+          );
+          continue;
+        }
+        occupiedDates.add(scheduledTime.toDateString());
 
         let generatedImageUrl = '';
         if (!options.deferImages) {

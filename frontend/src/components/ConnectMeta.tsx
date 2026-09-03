@@ -28,6 +28,18 @@ export default function ConnectMeta({ businessId, addToast, onNavigate }: Connec
     loadStatus();
   }, [businessId]);
 
+  // Facebook Login now opens in a new tab (handleOAuthConnect below) instead of
+  // navigating this one away. There is no direct signal back from that tab, so
+  // re-check status whenever the user returns focus to this tab — cheap, and
+  // it's how a stale "not connected" screen gets refreshed once they're done.
+  useEffect(() => {
+    const handleFocus = () => {
+      if (businessId) loadStatus();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [businessId]);
+
   const loadStatus = async () => {
     setLoading(true);
     try {
@@ -62,9 +74,19 @@ export default function ConnectMeta({ businessId, addToast, onNavigate }: Connec
   const handleOAuthConnect = async () => {
     try {
       const url = await api.meta.getAuthUrl(businessId);
-      // Simulate/Trigger OAuth Redirect
-      addToast('Redirecting', 'Opening Facebook Secure Authentication page...', 'info');
-      window.location.href = url;
+      // Opens in a new tab so the user never navigates away from VisionPilot
+      // AI itself. noopener/noreferrer: Facebook's dialog gets no reference
+      // back to this window, so it can't read or redirect this tab.
+      const oauthTab = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!oauthTab) {
+        addToast(
+          'Pop-up blocked',
+          'Your browser blocked the new tab. Please allow pop-ups for this site and try again.',
+          'alert',
+        );
+        return;
+      }
+      addToast('Opening Facebook', 'Complete the Facebook login in the new tab, then come back here.', 'info');
     } catch (e: any) {
       addToast('OAuth Link generation failed', e.message, 'alert');
     }

@@ -10,7 +10,7 @@ import { GRAPH_API_BASE, FACEBOOK_DIALOG_BASE } from '../lib/meta/graph-version'
 const META_OAUTH_REPLAY_WINDOW_MS = 10 * 60 * 1000;
 
 /** How long saving the account selection will wait for the webhook subscription. */
-const META_SUBSCRIBE_DEADLINE_MS = 12_000;
+const META_SUBSCRIBE_DEADLINE_MS = 20_000;
 
 dotenv.config();
 
@@ -342,6 +342,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       'pages_read_engagement',
       'pages_manage_posts',   // required to publish to a Facebook Page
       'pages_manage_ads',     // required to read the Page's lead forms
+      'pages_manage_metadata',// required to subscribe the Page to leadgen webhooks
       'leads_retrieval',      // required to read the leads themselves
       'instagram_basic',
       'instagram_content_publish',
@@ -459,6 +460,8 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
           'pages_show_list',
           'pages_read_engagement',
           'pages_manage_posts',
+          'pages_manage_ads',
+          'pages_manage_metadata',
           'leads_retrieval',
           'instagram_basic',
           'instagram_content_publish',
@@ -1133,7 +1136,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     imageUrl?: string,
   ): Promise<{ success: boolean; pagePostId?: string; error?: string }> {
     const workspace = (await this.firebase.workspacesDao?.findById(businessId)) || (await this.firebase.getBusinessById(businessId));
-    const accessToken = workspace?.metaPageAccessToken || workspace?.metaAccessToken;
+    const userToken = workspace?.metaAccessToken;
     // The page the user explicitly picked wins over whatever was captured at
     // OAuth time, otherwise changing the selection had no effect.
     const pageId = workspace?.selectedPageId || workspace?.metaPageId;
@@ -1144,7 +1147,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
     // Previously a missing token also returned a fake success, so the UI
     // reported "Posted!" while nothing had been published anywhere.
-    if (!accessToken || accessToken.startsWith('mock_')) {
+    if (!userToken || userToken.startsWith('mock_')) {
       return {
         success: false,
         error: 'Meta is not connected for this business. Open Connect Meta and authorise your Facebook account.',
@@ -1153,6 +1156,27 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
     if (!pageId) {
       return { success: false, error: 'No Facebook Page selected. Choose a Page on the Connect Meta screen.' };
+    }
+
+    // `metaPageAccessToken` is only ever captured for whichever Page was first
+    // in the list at connect time (see connectMeta above). The moment someone
+    // picks a *different* Page from the Connect Meta dropdown, that stored
+    // token no longer belongs to `pageId` — posting with it is exactly what
+    // Facebook rejects with the confusing "(#200) publish_actions... has been
+    // deprecated" error, even though the real problem is a mismatched token,
+    // not a missing permission. Resolve a fresh token for the page actually
+    // selected, the same way getPageAccessToken is already used for Instagram
+    // publishing and lead-webhook subscription below.
+    const pageToken =
+      (await this.getPageAccessToken(userToken, pageId)) ||
+      (pageId === workspace?.metaPageId ? workspace?.metaPageAccessToken : null);
+
+    if (!pageToken) {
+      return {
+        success: false,
+        error:
+          'Could not get a posting token for the selected Facebook Page. Reconnect Meta and confirm this app still has access to that Page.',
+      };
     }
 
     const unreachable = this.describeUnreachableImage(imageUrl);
@@ -1165,7 +1189,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
         ? `${GRAPH_API_BASE}/${pageId}/photos`
         : `${GRAPH_API_BASE}/${pageId}/feed`;
 
-      const params: any = { access_token: accessToken, message: caption };
+      const params: any = { access_token: pageToken, message: caption };
       if (imageUrl) params.url = imageUrl;
 
       const res = await axios.post(endpoint, null, { params });
@@ -1262,9 +1286,22 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     // Graph API was slow. Race it against a short deadline: the common case
     // reports a real result, and a slow call carries on in the background
     // instead of holding up the user.
-    const subscription = await Promise.race([
-      this.subscribePageToLeadgen(businessId, data.pageId),
-      new Promise<{ subscribed: boolean; error?: string; pending?: boolean }>((resolve) =>
+    // Connecting Meta is the moment to finish the whole lead setup, not just
+    // the webhook. A business owner should never have to go and build an
+    // Instant Form in Meta's own tools before their leads can arrive — the
+    // point of the product is that connecting is all they do.
+    const setup = await Promise.race([
+      (async () => {
+        const subscription = await this.subscribePageToLeadgen(businessId, data.pageId);
+        const leadFormId = await this.ensureLeadFormForBusiness(businessId).catch((err: any) => {
+          this.logger.warn(
+            `[Meta] Could not prepare a lead form for ${businessId}: ${err.message}`,
+          );
+          return null;
+        });
+        return { ...subscription, leadFormId, pending: false };
+      })(),
+      new Promise<any>((resolve) =>
         setTimeout(
           () => resolve({ subscribed: false, pending: true, error: 'Still being set up.' }),
           META_SUBSCRIBE_DEADLINE_MS,
@@ -1275,9 +1312,10 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     return {
       success: true,
       message: 'Meta accounts configured successfully',
-      leadWebhookSubscribed: subscription.subscribed,
-      leadWebhookPending: (subscription as any).pending || false,
-      leadWebhookError: subscription.error,
+      leadWebhookSubscribed: setup.subscribed,
+      leadWebhookPending: setup.pending || false,
+      leadWebhookError: setup.error,
+      leadFormId: setup.leadFormId || null,
     };
   }
 
@@ -1978,7 +2016,12 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     const appUrl = (process.env.FRONTEND_URL || 'https://visionpilotai.techvisiondigital.in').replace(/\/$/, '');
     const site = String(business?.websiteUrl || business?.website || '').trim().replace(/\/$/, '');
     const base = /^https?:\/\//i.test(site) ? site : appUrl;
-    return { privacyUrl: `${base}/privacy`, followUpUrl: base };
+
+    // Meta checks this URL is reachable and rejects the form otherwise, so let
+    // the deployment point at the real published policy when it has one.
+    const explicit = String(process.env.META_LEAD_FORM_PRIVACY_URL || '').trim();
+    const privacyUrl = /^https?:\/\//i.test(explicit) ? explicit : `${base}/privacy`;
+    return { privacyUrl, followUpUrl: base };
   }
 
   async createLeadForm(businessId: string, formName: string, questions: any[]) {
@@ -2095,10 +2138,17 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
   }
 
   async processLeadWebhook(entry: any) {
-    if (!entry || !entry.changes || entry.changes.length === 0) return;
+    if (!entry || !entry.changes || entry.changes.length === 0) {
+      this.logger.warn('[Meta webhook] Entry carried no changes; nothing to process.');
+      return;
+    }
 
     for (const change of entry.changes) {
-      if (change.field === 'leadgen') {
+      if (change.field !== 'leadgen') {
+        this.logger.log(`[Meta webhook] Skipping change of field "${change.field}" (only leadgen is handled).`);
+        continue;
+      }
+      {
         const leadgenData = change.value;
         const leadgenId = leadgenData.leadgen_id;
         const pageId = leadgenData.page_id;
@@ -2107,12 +2157,18 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
         // business and scanning in JS both cost a read per business and, once
         // the listing is bounded, silently dropped leads for any business
         // outside the fetched window.
+        this.logger.log(`[Meta webhook] leadgen event: leadgen_id=${leadgenId} page_id=${pageId}`);
+
         const matchedBusiness = await this.firebase.getBusinessByMetaPageId(pageId);
 
         if (!matchedBusiness) {
-          this.logger.warn(`Received lead for unknown page ID: ${pageId}`);
+          this.logger.warn(
+            `[Meta webhook] No business is connected to page ${pageId}, so this lead cannot be filed. ` +
+              'Reconnect Meta and select that Page in the app.',
+          );
           continue;
         }
+        this.logger.log(`[Meta webhook] Page ${pageId} belongs to business ${matchedBusiness.id}`);
 
         const businessId = matchedBusiness.id;
         const accessToken = matchedBusiness.metaAccessToken;
@@ -2133,10 +2189,21 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
         try {
           let fieldData = Array.isArray(leadgenData.field_data) ? leadgenData.field_data : [];
           if (!this.isMock && accessToken) {
-            const leadRes = await axios.get(
-              `${GRAPH_API_BASE}/${leadgenId}`,
-              { params: { access_token: accessToken } }
-            );
+            // Reading a lead by leadgen_id requires the PAGE access token.
+            // Sending the user token here returned a permissions error every
+            // time, so the lead was never saved and the CRM stayed empty even
+            // when the webhook had arrived correctly.
+            const pageToken = (await this.getPageAccessToken(accessToken, pageId)) || accessToken;
+            if (pageToken === accessToken) {
+              this.logger.warn(
+                `[Meta webhook] No Page token available for page ${pageId}; retrying with the user token, which Meta usually rejects for lead reads.`,
+              );
+            }
+
+            const leadRes = await axios.get(`${GRAPH_API_BASE}/${leadgenId}`, {
+              params: { access_token: pageToken },
+              timeout: 20_000,
+            });
 
             fieldData = leadRes.data.field_data || [];
           }
@@ -2176,7 +2243,11 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
           this.logger.log(`Successfully processed lead ${leadgenId} for business ${businessId}`);
         } catch (err: any) {
-          this.logger.error(`Failed to fetch lead details for ${leadgenId}`, err.message);
+          // 'Request failed with status code 400' says nothing. Surface what
+          // Meta actually objected to.
+          this.logger.error(
+            `[Meta webhook] Could not save lead ${leadgenId} for business ${businessId}: ${describeMetaError(err)}`,
+          );
         }
       }
     }
