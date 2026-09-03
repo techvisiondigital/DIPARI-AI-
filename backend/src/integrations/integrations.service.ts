@@ -342,7 +342,14 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       'pages_read_engagement',
       'pages_manage_posts',   // required to publish to a Facebook Page
       'pages_manage_ads',     // required to read the Page's lead forms
-      'pages_manage_metadata',// required to subscribe the Page to leadgen webhooks
+      // 'pages_manage_metadata' removed: it was never added under Permissions
+      // and Features for this app, so Facebook rejected the ENTIRE OAuth
+      // request with "Invalid Scopes: pages_manage_metadata" — not just this
+      // one scope, the whole Connect Meta flow. Add it back in
+      // developers.facebook.com (App Review > Permissions and Features) and
+      // restore it here once it's actually available to this app; until then
+      // leadgen-webhook subscription alone stays unavailable, everything else
+      // (publishing, insights, ads) is unaffected.
       'leads_retrieval',      // required to read the leads themselves
       'instagram_basic',
       'instagram_content_publish',
@@ -461,7 +468,6 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
           'pages_read_engagement',
           'pages_manage_posts',
           'pages_manage_ads',
-          'pages_manage_metadata',
           'leads_retrieval',
           'instagram_basic',
           'instagram_content_publish',
