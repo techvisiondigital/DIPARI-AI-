@@ -252,6 +252,35 @@ export class MetaController {
     }
   }
 
+  /**
+   * POST /meta/subscribe-leads — (re)subscribes the connected Page to leadgen
+   * webhooks. Connecting Meta does this automatically; this endpoint exists so
+   * a business already connected before the subscription was added — or one
+   * whose subscription failed — can be fixed without disconnecting first.
+   */
+  @Post('subscribe-leads')
+  async subscribeLeads(@Body() body: { businessId: string; pageId?: string }) {
+    if (!body?.businessId) {
+      throw new HttpException('Missing businessId', HttpStatus.BAD_REQUEST);
+    }
+    const business = await this.integrationsService.getBusinessForLeadSubscription(body.businessId);
+    const pageId = body.pageId || business?.selectedPageId || business?.metaPageId;
+    if (!pageId) {
+      throw new HttpException(
+        'No Facebook Page is connected for this business. Connect Meta and select a Page first.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const result = await this.integrationsService.subscribePageToLeadgen(body.businessId, pageId);
+    if (!result.subscribed) {
+      throw new HttpException(
+        result.error || 'Could not subscribe this Page to lead notifications.',
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+    return { success: true, pageId, message: 'This Page will now deliver new leads to your CRM.' };
+  }
+
   @Post('disconnect')
   async disconnect(@Body('businessId') businessId: string) {
     if (!businessId) throw new HttpException('Missing businessId', HttpStatus.BAD_REQUEST);

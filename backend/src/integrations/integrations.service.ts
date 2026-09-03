@@ -1249,7 +1249,83 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       }
     }
 
-    return { success: true, message: 'Meta accounts configured successfully' };
+    // Meta only delivers leadgen webhooks for a Page that the app has actually
+    // subscribed. Without this the whole lead pipeline is silently dead: the
+    // webhook handler, the CRM and the lead-assistant were all built and wired,
+    // but Meta was never told to send anything, so no lead ever arrived.
+    const subscription = await this.subscribePageToLeadgen(businessId, data.pageId);
+
+    return {
+      success: true,
+      message: 'Meta accounts configured successfully',
+      leadWebhookSubscribed: subscription.subscribed,
+      leadWebhookError: subscription.error,
+    };
+  }
+
+  /**
+   * Subscribes the app to this Page's `leadgen` webhook field, so Meta pushes
+   * new lead-form submissions to our webhook endpoint.
+   *
+   * Requires a PAGE access token (a user token is rejected), which is read
+   * from /me/accounts for the Page the user just selected.
+   *
+   * A failure here is reported but not thrown: the rest of the connection —
+   * publishing, insights — works regardless, and the user can retry from the
+   * dashboard. Leads simply will not arrive until this succeeds.
+   */
+  /** Reads the stored Meta selection so the controller can resolve the Page. */
+  async getBusinessForLeadSubscription(businessId: string): Promise<any> {
+    return this.firebase.getBusinessById(businessId);
+  }
+
+  async subscribePageToLeadgen(
+    businessId: string,
+    pageId: string,
+  ): Promise<{ subscribed: boolean; error?: string }> {
+    if (this.isMock) return { subscribed: true };
+
+    try {
+      const business = await this.firebase.getBusinessById(businessId);
+      const userToken = business?.metaAccessToken;
+      if (!userToken || String(userToken).startsWith('mock_')) {
+        return { subscribed: false, error: 'No Meta access token stored for this business.' };
+      }
+
+      // A Page subscription must be made with that Page's own token.
+      const pagesRes = await axios.get(`${GRAPH_API_BASE}/me/accounts`, {
+        params: { access_token: userToken, fields: 'id,access_token', limit: 200 },
+      });
+      const page = (pagesRes.data?.data || []).find((p: any) => String(p.id) === String(pageId));
+      const pageToken = page?.access_token;
+
+      if (!pageToken) {
+        return {
+          subscribed: false,
+          error: `No Page access token available for Page ${pageId}. Reconnect Meta and grant access to this Page.`,
+        };
+      }
+
+      const res = await axios.post(
+        `${GRAPH_API_BASE}/${pageId}/subscribed_apps`,
+        null,
+        { params: { subscribed_fields: 'leadgen', access_token: pageToken } },
+      );
+
+      if (res.data?.success) {
+        this.logger.log(`[Meta] Subscribed to leadgen webhooks for Page ${pageId} (business ${businessId})`);
+        await this.firebase
+          .updateBusiness(businessId, { leadWebhookSubscribedAt: new Date() })
+          .catch(() => undefined);
+        return { subscribed: true };
+      }
+
+      return { subscribed: false, error: 'Meta did not confirm the webhook subscription.' };
+    } catch (err: any) {
+      const detail = err?.response?.data?.error?.message || err.message;
+      this.logger.error(`[Meta] Could not subscribe Page ${pageId} to leadgen webhooks: ${detail}`);
+      return { subscribed: false, error: detail };
+    }
   }
 
   async disconnectMeta(businessId: string) {
