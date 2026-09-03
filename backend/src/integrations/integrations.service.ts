@@ -1173,15 +1173,24 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     // not a missing permission. Resolve a fresh token for the page actually
     // selected, the same way getPageAccessToken is already used for Instagram
     // publishing and lead-webhook subscription below.
+    //
+    // resolvePageAccessTokenWithReason also tells us *why* that lookup failed.
+    // When it's a dead user-level token (Facebook code 190 — expired,
+    // revoked, password changed...), the cached `metaPageAccessToken` fallback
+    // below is from that same broken login and will be dead too, so we skip
+    // it and say so plainly instead of letting a second doomed call surface
+    // Facebook's confusing raw text.
+    const resolvedPageToken = await this.resolvePageAccessTokenWithReason(userToken, pageId);
     const pageToken =
-      (await this.getPageAccessToken(userToken, pageId)) ||
-      (pageId === workspace?.metaPageId ? workspace?.metaPageAccessToken : null);
+      resolvedPageToken.token ||
+      (!resolvedPageToken.expired && pageId === workspace?.metaPageId ? workspace?.metaPageAccessToken : null);
 
     if (!pageToken) {
       return {
         success: false,
-        error:
-          'Could not get a posting token for the selected Facebook Page. Reconnect Meta and confirm this app still has access to that Page.',
+        error: resolvedPageToken.expired
+          ? 'Your Meta login has expired or was revoked. Click Connect Meta, sign in to Facebook again, then retry this post.'
+          : 'Could not get a posting token for the selected Facebook Page. Reconnect Meta and confirm this app still has access to that Page.',
       };
     }
 
@@ -1201,7 +1210,15 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
       const res = await axios.post(endpoint, null, { params });
       return { success: true, pagePostId: res.data?.id || res.data?.post_id };
     } catch (error: any) {
-      return { success: false, error: error.response?.data?.error?.message || error.message };
+      const fbError = error.response?.data?.error;
+      // Same code-190 case as above, but caught here for the rarer path where
+      // a token resolves successfully and still dies before the actual post
+      // (e.g. revoked a moment later) — same plain instruction either way.
+      const friendlyError =
+        Number(fbError?.code) === 190
+          ? 'Your Meta login has expired or was revoked. Click Connect Meta, sign in to Facebook again, then retry this post.'
+          : fbError?.message || error.message;
+      return { success: false, error: friendlyError };
     }
   }
 
@@ -1347,6 +1364,39 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
         }`,
       );
       return null;
+    }
+  }
+
+  /**
+   * Same lookup as getPageAccessToken, but also reports *why* it failed, so a
+   * dead user-level token isn't masked by silently falling back to a cached
+   * Page token that came from that same broken login (see publishPagePost).
+   * Kept as a separate method rather than changing getPageAccessToken's
+   * return type, so the other call sites (Instagram publish, lead webhook,
+   * insights) keep their existing null-on-failure behaviour untouched.
+   */
+  private async resolvePageAccessTokenWithReason(
+    userToken: string,
+    pageId: string,
+  ): Promise<{ token: string | null; expired?: boolean }> {
+    try {
+      const res = await axios.get(`${GRAPH_API_BASE}/me/accounts`, {
+        params: { access_token: userToken, fields: 'id,access_token', limit: 200 },
+        timeout: 15_000,
+      });
+      const page = (res.data?.data || []).find((p: any) => String(p.id) === String(pageId));
+      return { token: page?.access_token || null };
+    } catch (err: any) {
+      const fbError = err?.response?.data?.error;
+      // Code 190 = OAuthException: the user-level token itself is dead
+      // (expired, revoked, password changed, app secret rotated...). No Page
+      // token derived from it will work either, so the caller should stop
+      // here instead of trying a cached fallback from the same session.
+      const expired = Number(fbError?.code) === 190;
+      this.logger.warn(
+        `[Meta] Could not resolve a Page access token for ${pageId}: ${fbError?.message || err.message}`,
+      );
+      return { token: null, expired };
     }
   }
 
